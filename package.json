@@ -1,5 +1,5 @@
 {
-  "name": "mobaxterm-clone",
+  "name": "momoca",
   "version": "0.1.0",
   "description": "Tabbed SSH terminal with synced SFTP browser for macOS",
   "main": "./out/main/index.js",
@@ -39,8 +39,8 @@
     "vite": "^5.4.11"
   },
   "build": {
-    "appId": "dev.local.mobaxterm-clone",
-    "productName": "MobaClone",
+    "appId": "dev.local.momoca",
+    "productName": "MoMoca",
     "directories": {
       "output": "release"
     },

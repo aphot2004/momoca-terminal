@@ -1,19 +1,65 @@
-# MobaClone
+<img src="build/icon.svg" width="96" align="right" alt="">
 
-A MobaXterm-style terminal for macOS: tabbed local and SSH sessions with an SFTP
-file browser that shares the same SSH connection as the shell beside it.
+# MoMoca
+
+A MobaXterm-style terminal workspace for macOS: tabbed local and SSH sessions
+with an SFTP file browser that rides the same SSH connection as the shell beside
+it, port forwarding, macros, network tools and an admin toolbox in one window.
 
 Electron + TypeScript + React, `xterm.js` for rendering, `ssh2` for the protocol,
-`node-pty` for local shells.
+`node-pty` for local shells. macOS only.
 
-## Running it
+![The MoMoca window: menu bar, buttons bar, session sidebar and a terminal](docs/screenshot-terminal.png)
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshot-split.png" alt="Four terminals in a grid with MultiExec broadcasting one command to all of them"></td>
+<td width="50%"><img src="docs/screenshot-menus.png" alt="The Tools menu open, grouped into System, Office and Network"></td>
+</tr>
+<tr>
+<td><b>MultiExec.</b> Type once, and the keystrokes reach every terminal on screen.</td>
+<td><b>MobaXterm's menus.</b> Terminal, Sessions, View, X server, Tools, Macros, Settings, Help.</td>
+</tr>
+<tr>
+<td><img src="docs/screenshot-tools.png" alt="The Tools workspace showing the SSH key generator"></td>
+<td><img src="docs/screenshot-light.png" alt="The same window in the light theme"></td>
+</tr>
+<tr>
+<td><b>A tools workspace.</b> Processes, hardware, keygen, ports, Wake-on-LAN, packet capture.</td>
+<td><b>Two complete themes.</b> Both apply to the app chrome <i>and</i> to live terminals.</td>
+</tr>
+</table>
+
+## Install
+
+Download the DMG from [Releases](../../releases), drag MoMoca to Applications,
+and launch it.
+
+The DMG is **not notarized**, so the first launch needs Finder's context menu:
+right-click MoMoca ▸ **Open** ▸ **Open**. Double-clicking shows Gatekeeper's
+"cannot be opened" dialog instead, with no way past it.
+
+## Building it yourself
 
 ```bash
 npm install && npm run dev
 ```
 
-`npm run build` produces the bundles in `out/`; `npm start` previews the built app.
-`npm run dist` packages a universal (arm64 + x64) DMG.
+| Command | What it does |
+|---|---|
+| `npm run dev` | Vite with HMR, and the main process restarts on change |
+| `npm run typecheck` | ~3s, no bundling; catches most mistakes |
+| `npm run build` | Bundles main, preload and renderer into `out/` |
+| `npm start` | Runs the built bundles |
+| `npm run dist` | Universal (arm64 + x64) DMG into `release/` |
+
+`npm run dist` rebuilds `node-pty` and `serialport` from source for both
+architectures, so it needs Xcode's command line tools (`xcode-select --install`)
+and a Python that node-gyp can drive — see the macOS notes below, because a
+current Python will fail on its own.
+
+Signing is optional. Without a Developer ID the DMG still builds and runs; it is
+simply unsigned, and users need the right-click-Open dance above.
 
 ## What works today
 
@@ -239,6 +285,25 @@ The harness now clicks at real coordinates and, before every click, asserts the
 target is the topmost element at its own centre via `document.elementFromPoint`.
 Anything sitting under an overlay fails loudly instead of silently passing.
 
+## Screenshots
+
+The images above are generated, never hand-captured:
+
+```bash
+npm run build
+./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron scripts/shoot.js --user-data-dir=/tmp/momoca-shots
+```
+
+The throwaway `--user-data-dir` is not optional. The script seeds fixture
+sessions (`web-01`, `db-primary`, RFC1918 addresses that resolve to nothing) so
+that no real host name, address or account ever lands in a public image, and
+pointing it at the real store would both pollute it and leak. It also avoids the
+tools that display real data — the process list names your account in every row.
+
+`Page.captureScreenshot` over CDP is no use here: it never answers while the
+window is occluded, which it always is when a script drives it. The capture runs
+in the main process through `webContents.capturePage()` instead.
+
 ## macOS notes
 
 - **`node-pty`'s `spawn-helper`** loses its executable bit during npm extraction,
@@ -249,6 +314,15 @@ Anything sitting under an overlay fails loudly instead of silently passing.
 
   ```bash
   rm -rf node_modules/electron/dist && unzip -q ~/Library/Caches/electron/*/electron-*-darwin-arm64.zip -d node_modules/electron/dist && printf 'Electron.app/Contents/MacOS/Electron' > node_modules/electron/path.txt
+  ```
+
+- **`npm run dist` fails on Python 3.12 and newer** with
+  `ModuleNotFoundError: No module named 'distutils'`. The bundled node-gyp
+  (9.x) still imports `distutils`, which Python removed in 3.12. `setuptools`
+  puts it back, and a throwaway venv keeps it out of your system Python:
+
+  ```bash
+  python3 -m venv /tmp/gypvenv && /tmp/gypvenv/bin/pip install setuptools && PYTHON=/tmp/gypvenv/bin/python npm run dist
   ```
 
 - Packaging uses the hardened runtime; `build/entitlements.mac.plist` grants the
