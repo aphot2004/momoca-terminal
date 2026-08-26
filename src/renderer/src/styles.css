@@ -1,0 +1,2409 @@
+:root,
+:root[data-theme='dark'] {
+  --bg: #11131a;
+  --bg-chrome: #171a23;
+  --bg-ribbon: #1b1f2b;
+  --bg-raised: #1d2130;
+  --bg-input: #0e1017;
+  --border: #262c3d;
+  --border-soft: #1f2433;
+  --text: #d5dae5;
+  --text-dim: #8b93a8;
+  --accent: #7aa2f7;
+  --accent-ink: #0d1117;
+  --danger: #f7768e;
+  --danger-ink: #2b0a11;
+  --ok: #9ece6a;
+  --ok-ink: #08130a;
+  --warn: #e0af68;
+  --warn-ink: #1b1300;
+  --hover: #232939;
+  --shadow: rgba(0, 0, 0, 0.5);
+  --scroll-thumb: #3a4358;
+  --scroll-thumb-hover: #4e5a76;
+}
+
+:root[data-theme='light'] {
+  --bg: #ffffff;
+  --bg-chrome: #eef0f4;
+  --bg-ribbon: #e4e7ed;
+  --bg-raised: #f6f7f9;
+  --bg-input: #ffffff;
+  --border: #c9cedb;
+  --border-soft: #dde1e9;
+  --text: #1f2328;
+  --text-dim: #5f6673;
+  --accent: #2f6fd0;
+  --accent-ink: #ffffff;
+  --danger: #cf222e;
+  --danger-ink: #ffffff;
+  --ok: #1a7f37;
+  --ok-ink: #ffffff;
+  --warn: #9a6700;
+  --warn-ink: #ffffff;
+  --hover: #e2e6ee;
+  --shadow: rgba(30, 40, 60, 0.22);
+  --scroll-thumb: #b8bfcd;
+  --scroll-thumb-hover: #97a0b2;
+}
+
+:root {
+  --ui-font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --mono-font: 'SF Mono', 'JetBrains Mono', Menlo, Monaco, monospace;
+
+  /* Type scale. Five steps, because six sizes inside two and a half pixels
+     read as noise rather than hierarchy. Terminal text is not on this scale:
+     xterm owns its own size so the View menu can zoom it. */
+  --text-micro: 10px;
+  --text-label: 11px;
+  --text-body: 12.5px;
+  --text-headline: 14.5px;
+  --text-display: 30px;
+
+  /* Corner scale, by what the shape is: inline marks, small controls,
+     controls, panels, overlays, and the one true pill. */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 5px;
+  --radius-lg: 7px;
+  --radius-xl: 10px;
+  --radius-pill: 999px;
+
+  --titlebar-h: 28px;
+  --ribbon-h: 58px;
+  --tabbar-h: 30px;
+  --stats-h: 26px;
+  --status-h: 22px;
+  --sidebar-w: 236px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ui-font);
+  font-size: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 5px 7px;
+  width: 100%;
+}
+
+textarea {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.linklike {
+  color: var(--accent);
+  text-decoration: underline;
+  padding: 0;
+  font-size: var(--text-body);
+}
+
+/* ---------- app shell ---------- */
+
+.app {
+  display: grid;
+  grid-template-rows: var(--titlebar-h) auto 1fr var(--stats-h) var(--status-h);
+  height: 100%;
+}
+
+/* View ▸ Show diagnostics bar. The row has to go with the bar, or the status
+   line drops into the gap the bar left behind. */
+.app.no-stats {
+  grid-template-rows: var(--titlebar-h) auto 1fr var(--status-h);
+}
+
+.titlebar {
+  -webkit-app-region: drag;
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.body {
+  display: flex;
+  min-height: 0;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+/* ---------- menu bar ---------- */
+
+/* MobaXterm stacks a menu bar above the buttons bar; either can be hidden, so
+   they share one grid row and this wrapper collapses to nothing when empty. */
+.chrome {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.menubar {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  padding: 0 6px;
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.menubar-item {
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: var(--text-body);
+}
+
+.menubar-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.menubar-item.open {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ---------- ribbon ---------- */
+
+.ribbon {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 8px;
+  background: var(--bg-ribbon);
+  border-bottom: 1px solid var(--border);
+}
+
+.ribbon-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 58px;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  color: var(--text-dim);
+}
+
+.ribbon-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.ribbon-btn.active {
+  background: var(--hover);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.ribbon-icon {
+  display: flex;
+  height: 22px;
+}
+
+.ribbon-label {
+  font-size: var(--text-label);
+  letter-spacing: 0.1px;
+}
+
+.ribbon-sep {
+  width: 1px;
+  background: var(--border);
+  margin: 8px 6px;
+}
+
+.ribbon-spacer {
+  flex: 1;
+}
+
+/* MobaXterm's three button sizes. Only the captions variant shows its labels. */
+.ribbon.size-small .ribbon-label,
+.ribbon.size-standard .ribbon-label {
+  display: none;
+}
+
+.ribbon.size-small .ribbon-btn,
+.ribbon.size-standard .ribbon-btn {
+  min-width: 0;
+}
+
+.ribbon.size-small .ribbon-icon,
+.ribbon.size-small .ribbon-icon svg {
+  height: 15px;
+  width: auto;
+}
+
+.ribbon.size-small .ribbon-btn {
+  padding: 3px 7px;
+}
+
+/* ---------- sidebar ---------- */
+
+.sidebar {
+  width: var(--sidebar-w);
+  flex: none;
+  background: var(--bg-chrome);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The traffic lights float over the very top-left of the window. */
+.sidebar-head {
+  height: 0;
+  flex: none;
+}
+
+.quick-connect {
+  padding: 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.quick-connect input {
+  font-size: var(--text-body);
+}
+
+.panel-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.panel-tab {
+  flex: 1;
+  padding: 5px 0;
+  font-size: var(--text-label);
+  color: var(--text-dim);
+  border-bottom: 2px solid transparent;
+}
+
+.panel-tab:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.panel-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+  background: var(--bg-raised);
+}
+
+.session-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+  min-height: 0;
+}
+
+.tree-group {
+  margin-bottom: 6px;
+}
+
+.tree-folder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  font-size: var(--text-label);
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 4px 8px 4px 20px;
+  border-radius: var(--radius-md);
+  text-align: left;
+}
+
+.session-row:hover {
+  background: var(--hover);
+}
+
+.session-row .sname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-row .meta {
+  color: var(--text-dim);
+  font-size: var(--text-label);
+  margin-left: auto;
+  padding-left: 6px;
+  white-space: nowrap;
+}
+
+.kind-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-xs);
+  flex: none;
+}
+
+.kind-dot.ssh {
+  background: var(--accent);
+}
+
+.kind-dot.local {
+  background: var(--ok);
+}
+
+.sidebar-actions {
+  padding: 7px;
+  border-top: 1px solid var(--border);
+  flex: none;
+}
+
+.sidebar-actions .btn {
+  width: 100%;
+}
+
+.muted-row {
+  padding: 12px 10px;
+  color: var(--text-dim);
+  font-size: var(--text-body);
+  line-height: 1.7;
+}
+
+/* ---------- tabs ---------- */
+
+.tabbar {
+  height: var(--tabbar-h);
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: none;
+}
+
+.tabbar::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border-right: 1px solid var(--border);
+  color: var(--text-dim);
+  white-space: nowrap;
+  max-width: 220px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tab.active {
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.tab .tab-number {
+  font-size: var(--text-micro);
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}
+
+.tab .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dot.connecting,
+.status-dot.connecting {
+  background: var(--warn);
+}
+.dot.ready,
+.status-dot.ready {
+  background: var(--ok);
+}
+.dot.error,
+.status-dot.error {
+  background: var(--danger);
+}
+.dot.closed,
+.status-dot.closed {
+  background: var(--text-dim);
+}
+
+.tab .close {
+  color: var(--text-dim);
+  padding: 0 2px;
+  border-radius: var(--radius-xs);
+  line-height: 1;
+  font-size: var(--text-label);
+}
+
+.tab .close:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
+.new-tab {
+  padding: 0 12px;
+  color: var(--text-dim);
+  font-size: var(--text-headline);
+}
+
+.new-tab:hover {
+  color: var(--text);
+}
+
+/* ---------- terminal ---------- */
+
+.terminal-stack {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  background: var(--bg);
+}
+
+.terminal-pane {
+  position: absolute;
+  inset: 0;
+  padding: 4px 0 4px 6px;
+}
+
+.terminal-pane[hidden] {
+  display: none;
+}
+
+/* ---------- welcome ---------- */
+
+.welcome {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.welcome-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.welcome-logo {
+  width: 58px;
+  height: 58px;
+}
+
+/* The wordmark: the name, plus the caret from the icon. The block is sized in
+   em so it tracks the wordmark rather than needing its own scale step. */
+.wordmark {
+  display: flex;
+  align-items: baseline;
+  gap: 0.13em;
+}
+
+.wordmark-caret {
+  width: 0.34em;
+  height: 0.68em;
+  border-radius: var(--radius-xs);
+  background: var(--accent);
+  align-self: center;
+  transform: translateY(0.06em);
+}
+
+.welcome-brand h1 {
+  margin: 0;
+  font-size: var(--text-display);
+  font-weight: 300;
+  letter-spacing: -0.3px;
+}
+
+.start-local {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 22px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: var(--text-body);
+}
+
+.start-local:hover {
+  border-color: var(--ok);
+}
+
+.start-plus {
+  color: var(--ok);
+  font-size: var(--text-headline);
+  font-weight: 600;
+}
+
+.welcome-hint {
+  color: var(--text-dim);
+  font-size: var(--text-body);
+}
+
+.welcome-hint kbd,
+.empty-state kbd {
+  font-family: var(--mono-font);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 1px 4px;
+}
+
+.theme-picker {
+  margin-top: 10px;
+  padding: 16px 22px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  text-align: center;
+}
+
+.theme-picker-title {
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+.theme-cards {
+  display: flex;
+  gap: 16px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 7px;
+  border-radius: var(--radius-lg);
+  border: 2px solid transparent;
+  color: var(--text-dim);
+}
+
+.theme-card:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.theme-card.selected {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.theme-preview {
+  width: 150px;
+  height: 94px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  display: block;
+}
+
+/* ---------- file browser ---------- */
+
+.filepane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.filepane-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--border-soft);
+  flex: none;
+}
+
+.toolbar-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 2px 4px;
+}
+
+.filepane-pathbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--border-soft);
+  flex: none;
+}
+
+.filepane-pathbar input {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  padding: 3px 6px;
+}
+
+.filepane-header {
+  display: flex;
+  padding: 3px 9px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.filepane-header .col-size {
+  margin-left: auto;
+}
+
+.icon-btn {
+  width: 24px;
+  height: 22px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  display: grid;
+  place-items: center;
+  font-size: var(--text-body);
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.file-row.selected {
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  color: var(--text);
+}
+
+.filepane-path {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  color: var(--text-dim);
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  flex: none;
+}
+
+.filepane-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 8px;
+  text-align: left;
+}
+
+.file-row:hover {
+  background: var(--hover);
+}
+
+.file-row .fname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-row .size {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: var(--text-label);
+  font-variant-numeric: tabular-nums;
+  padding-left: 6px;
+  white-space: nowrap;
+}
+
+.file-row .glyph {
+  width: 14px;
+  flex: none;
+  font-size: var(--text-label);
+  text-align: center;
+}
+
+.filepane-footer {
+  border-top: 1px solid var(--border);
+  flex: none;
+}
+
+.filepane-follow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: var(--text-label);
+  color: var(--text-dim);
+}
+
+.filepane-follow input {
+  width: auto;
+}
+
+.filepane-error {
+  padding: 10px;
+  color: var(--danger);
+  font-size: var(--text-body);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- diagnostics bar ---------- */
+
+.statsbar {
+  height: var(--stats-h);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 10px;
+  background: var(--bg-chrome);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-label);
+  color: var(--text-dim);
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.statsbar::-webkit-scrollbar {
+  display: none;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.metric-label {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: var(--text-micro);
+  opacity: 0.75;
+}
+
+.metric-value {
+  font-family: var(--mono-font);
+  font-size: var(--text-micro);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  gap: 8px;
+}
+
+.meter {
+  width: 54px;
+  height: 6px;
+  border-radius: var(--radius-xs);
+  background: var(--border);
+  overflow: hidden;
+  flex: none;
+}
+
+.meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-xs);
+  transition: width 400ms ease;
+}
+
+.meter-fill.ok {
+  background: var(--ok);
+}
+.meter-fill.warn {
+  background: var(--warn);
+}
+.meter-fill.crit {
+  background: var(--danger);
+}
+
+.net-rx {
+  color: var(--ok);
+}
+.net-tx {
+  color: var(--accent);
+}
+
+.scope-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-dim);
+  font-size: var(--text-micro);
+  flex: none;
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope-chip.remote {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.scope-chip:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.status-notice {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- transfer progress ---------- */
+
+.transfer {
+  padding: 5px 8px;
+  border-top: 1px solid var(--border-soft);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.transfer-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--text-label);
+  color: var(--text-dim);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.transfer-line.error {
+  color: var(--danger);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.transfer-line.done {
+  color: var(--ok);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.transfer-verb {
+  flex: none;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-size: var(--text-micro);
+  opacity: 0.8;
+}
+
+/* The filename is the part worth reading, so it gets the remaining width. */
+.transfer-name {
+  font-family: var(--mono-font);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.transfer-stats {
+  display: flex;
+  gap: 10px;
+  font-size: var(--text-micro);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.transfer-rate {
+  color: var(--accent);
+}
+
+.transfer .meter {
+  width: 100%;
+}
+
+/* ---------- tool guide ---------- */
+
+.tool-row {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.tool-row:last-child {
+  border-bottom: none;
+}
+
+.tool-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.tool-head:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.tool-name {
+  font-weight: 550;
+}
+
+.tool-purpose {
+  color: var(--text-dim);
+  font-size: var(--text-label);
+}
+
+.tool-state {
+  margin-left: auto;
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--danger);
+}
+
+.tool-state.ok {
+  color: var(--ok);
+}
+
+.tool-detail {
+  padding: 0 10px 8px 32px;
+  font-family: var(--mono-font);
+  font-size: var(--text-micro);
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.tool-body {
+  padding: 0 12px 12px 32px;
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+
+.tool-body p {
+  margin: 0 0 8px;
+  color: var(--text-dim);
+}
+
+.tool-body ol {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.tool-body li {
+  margin-bottom: 7px;
+}
+
+.cmd-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.cmd-row code {
+  flex: 1;
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 7px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.tool-body a,
+.hint a {
+  color: var(--accent);
+}
+
+/* ---------- ribbon badge ---------- */
+
+.ribbon-badge-wrap {
+  position: relative;
+  display: flex;
+}
+
+.ribbon-badge {
+  position: absolute;
+  top: -3px;
+  right: -6px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: var(--radius-lg);
+  background: var(--ok);
+  color: var(--ok-ink);
+  font-size: var(--text-micro);
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+}
+
+/* ---------- session type picker ---------- */
+
+.type-picker {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 3px;
+  padding: 7px;
+  margin-bottom: 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+}
+
+.type-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 7px 2px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  color: var(--text-dim);
+}
+
+.type-tile:hover:not(.disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.type-tile.selected {
+  background: var(--hover);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.type-tile.disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  position: relative;
+}
+
+/* A dot marks a type whose external client is missing. */
+.type-missing {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+/* Selected but unavailable: keep it legible while editing such a session. */
+.type-tile.disabled.selected {
+  opacity: 0.75;
+  border-color: var(--danger);
+  cursor: default;
+}
+
+.picker-missing {
+  margin-top: -8px;
+}
+
+.type-glyph {
+  font-size: var(--text-headline);
+  line-height: 1;
+}
+
+.type-label {
+  font-size: var(--text-micro);
+}
+
+.hint {
+  margin: -4px 0 10px;
+  font-size: var(--text-label);
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.hint code {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xs);
+  padding: 0 3px;
+}
+
+.key-badge.conn {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+/* ---------- status bar ---------- */
+
+.statusbar {
+  height: var(--status-h);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  background: var(--bg-ribbon);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-label);
+  color: var(--text-dim);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.statusbar .sep {
+  opacity: 0.5;
+}
+
+.status-cwd {
+  font-family: var(--mono-font);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-right {
+  margin-left: auto;
+  padding-left: 10px;
+}
+
+/* ---------- buttons ---------- */
+
+.btn {
+  padding: 5px 11px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.btn.ghost {
+  background: none;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+.btn.ghost:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--hover);
+}
+
+.btn.danger {
+  color: var(--danger);
+}
+
+/* ---------- modals ---------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 6, 12, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 50;
+}
+
+.modal {
+  width: 420px;
+  max-height: 84vh;
+  overflow-y: auto;
+  background: var(--bg-chrome);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 18px;
+  box-shadow: 0 22px 56px var(--shadow);
+}
+
+.modal.wide {
+  width: 540px;
+}
+
+.modal.narrow {
+  width: 360px;
+}
+
+.modal h2 {
+  margin: 0 0 14px;
+  font-size: var(--text-headline);
+}
+
+.field {
+  margin-bottom: 10px;
+}
+
+.field label {
+  display: block;
+  font-size: var(--text-label);
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.field-row {
+  display: flex;
+  gap: 8px;
+}
+
+.inset {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: 11px;
+  margin-bottom: 11px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-body);
+}
+
+.checkbox input {
+  width: auto;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.fingerprint {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  word-break: break-all;
+  margin: 8px 0;
+}
+
+.warning {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  font-size: var(--text-body);
+  margin-bottom: 10px;
+}
+
+.notice {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  border: 1px solid var(--ok);
+  color: var(--ok);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  font-size: var(--text-body);
+  margin-bottom: 10px;
+}
+
+/* View ▸ Put sidebar on the right. Reversing the row keeps the panel's own
+   markup — and the terminals it sits beside — exactly where they were. */
+.app.sidebar-right .body {
+  flex-direction: row-reverse;
+}
+
+.app.sidebar-right .sidebar {
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+
+/* ---------- context menu ---------- */
+
+.ctx-menu {
+  position: fixed;
+  z-index: 200;
+  min-width: 218px;
+  padding: 4px;
+  background: var(--bg-chrome);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 34px var(--shadow);
+}
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-size: var(--text-body);
+}
+
+.ctx-item:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.ctx-item.danger {
+  color: var(--danger);
+}
+
+.ctx-item.danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: var(--danger-ink);
+}
+
+.ctx-hint {
+  margin-left: auto;
+  opacity: 0.6;
+  font-size: var(--text-label);
+}
+
+.ctx-sep {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 4px 6px;
+}
+
+/* A menu with any ticked item gives every row the same check column, so the
+   labels line up whether or not they are ticked. */
+.ctx-menu.ticked .ctx-item {
+  padding-left: 4px;
+}
+
+.ctx-tick {
+  width: 13px;
+  flex: none;
+  text-align: center;
+  font-size: var(--text-label);
+}
+
+.ctx-item.checked {
+  color: var(--text);
+}
+
+.ctx-heading {
+  padding: 6px 9px 3px;
+  font-size: var(--text-micro);
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  opacity: 0.75;
+}
+
+.ctx-arrow {
+  margin-left: auto;
+  opacity: 0.7;
+}
+
+/* A hint and a submenu arrow can share a row; keep the arrow last. */
+.ctx-hint + .ctx-arrow {
+  margin-left: 6px;
+}
+
+/* ---------- settings ---------- */
+
+.modal.settings-modal {
+  width: 560px;
+  max-width: 92vw;
+}
+
+.settings-body {
+  max-height: 58vh;
+  overflow-y: auto;
+  padding-top: 4px;
+}
+
+.settings-body section {
+  margin-bottom: 14px;
+}
+
+.settings-body h3 {
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+  margin: 0 0 6px;
+}
+
+.setting-row {
+  align-items: center;
+  margin-bottom: 7px;
+}
+
+.setting-row input {
+  width: 80px;
+}
+
+.shortcut-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body);
+}
+
+.shortcut-table th {
+  text-align: left;
+  white-space: nowrap;
+  padding: 4px 14px 4px 0;
+  font-family: var(--mono-font);
+  font-weight: 600;
+  color: var(--accent);
+  vertical-align: top;
+}
+
+.shortcut-table td {
+  padding: 4px 0;
+  color: var(--text-dim);
+}
+
+/* ---------- remote editor ---------- */
+
+.modal.editor {
+  width: 760px;
+  max-width: 92vw;
+}
+
+.editor-path {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  color: var(--text-dim);
+  margin: -8px 0 10px;
+  overflow-wrap: anywhere;
+}
+
+.editor-area {
+  width: 100%;
+  height: 46vh;
+  min-height: 220px;
+  font-size: var(--text-body);
+  line-height: 1.5;
+  resize: vertical;
+  tab-size: 4;
+}
+
+.editor-hint {
+  margin-right: auto;
+  align-self: center;
+  font-size: var(--text-label);
+  color: var(--text-dim);
+}
+
+.dirty-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+  margin-left: 7px;
+  vertical-align: middle;
+}
+
+/* ---------- properties ---------- */
+
+.props {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 5px 12px;
+  margin: 0;
+  font-size: var(--text-body);
+}
+
+.props dt {
+  color: var(--text-dim);
+}
+
+.props dd {
+  margin: 0;
+}
+
+.props .mono {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+}
+
+.props .wrap {
+  overflow-wrap: anywhere;
+}
+
+.perm-grid {
+  border-collapse: collapse;
+  font-size: var(--text-body);
+}
+
+.perm-grid th,
+.perm-grid td {
+  padding: 3px 12px 3px 0;
+  text-align: left;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.perm-grid td:first-child {
+  color: var(--text);
+}
+
+.perm-grid input {
+  width: auto;
+}
+
+/* ---------- key manager ---------- */
+
+.key-list {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.key-row:last-child {
+  border-bottom: none;
+}
+
+.key-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.key-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.key-type {
+  font-family: var(--mono-font);
+  font-size: var(--text-micro);
+  color: var(--text-dim);
+}
+
+.key-badge {
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-xs);
+  padding: 0 4px;
+}
+
+.key-fp {
+  font-family: var(--mono-font);
+  font-size: var(--text-micro);
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+/* ---------- network tools ---------- */
+
+.panel-tabs.inline {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.net-results {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  margin-top: 4px;
+}
+
+.net-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: var(--text-body);
+}
+
+.net-row:last-child {
+  border-bottom: none;
+}
+
+.net-row .mono {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+}
+
+.net-row .dim {
+  color: var(--text-dim);
+}
+
+.net-row .ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.net-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.preset-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: -4px 0 12px;
+}
+
+/* ---------- macros ---------- */
+
+.inset.recording {
+  border-color: var(--danger);
+}
+
+.rec-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-body);
+  margin-bottom: 6px;
+}
+
+.rec-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: rec-pulse 1.2s ease-in-out infinite;
+  flex: none;
+}
+
+@keyframes rec-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.ribbon-badge.rec {
+  min-width: 9px;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  background: var(--danger);
+  animation: rec-pulse 1.2s ease-in-out infinite;
+}
+
+.macro-preview {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  color: var(--text-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rec-dot,
+  .ribbon-badge.rec {
+    animation: none;
+  }
+}
+
+/* ---------- floating recording bar ---------- */
+
+/*
+ * Sits above the terminal but is not a modal: no scrim, and pointer events land
+ * on the bar alone, so the terminal underneath stays fully typeable while a
+ * macro records.
+ */
+.recording-bar {
+  position: fixed;
+  right: 14px;
+  bottom: calc(var(--stats-h) + var(--status-h) + 12px);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-xl);
+  background: var(--bg-chrome);
+  border: 1px solid var(--danger);
+  box-shadow: 0 10px 30px var(--shadow);
+  font-size: var(--text-body);
+  max-width: min(560px, calc(100vw - 28px));
+}
+
+.rec-count {
+  white-space: nowrap;
+  font-weight: 550;
+}
+
+.rec-preview {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 60px;
+  direction: rtl;
+  text-align: left;
+}
+
+/* ---------- scrollbars ---------- */
+
+/*
+ * macOS hides overlay scrollbars until you scroll, which leaves no hint that a
+ * pane has more content and nothing to grab. These are always visible, thin,
+ * and themed — the terminal especially needs one, since scrollback is invisible
+ * otherwise.
+ */
+/*
+ * Deliberately NOT setting `scrollbar-width` here. Chromium ignores every
+ * ::-webkit-scrollbar rule on an element whose scrollbar-width is `thin` or
+ * `none`, so setting it silently cancelled all the styling below and left the
+ * macOS overlay scrollbar (zero width, invisible until you scroll).
+ */
+
+.xterm-viewport::-webkit-scrollbar,
+.session-tree::-webkit-scrollbar,
+.filepane-list::-webkit-scrollbar,
+.key-list::-webkit-scrollbar,
+.net-results::-webkit-scrollbar,
+.modal::-webkit-scrollbar,
+.editor-area::-webkit-scrollbar,
+.macro-preview::-webkit-scrollbar,
+.tool-body::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+.xterm-viewport::-webkit-scrollbar-track,
+.session-tree::-webkit-scrollbar-track,
+.filepane-list::-webkit-scrollbar-track,
+.key-list::-webkit-scrollbar-track,
+.net-results::-webkit-scrollbar-track,
+.modal::-webkit-scrollbar-track,
+.editor-area::-webkit-scrollbar-track,
+.macro-preview::-webkit-scrollbar-track,
+.tool-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb,
+.session-tree::-webkit-scrollbar-thumb,
+.filepane-list::-webkit-scrollbar-thumb,
+.key-list::-webkit-scrollbar-thumb,
+.net-results::-webkit-scrollbar-thumb,
+.modal::-webkit-scrollbar-thumb,
+.editor-area::-webkit-scrollbar-thumb,
+.macro-preview::-webkit-scrollbar-thumb,
+.tool-body::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: var(--radius-md);
+  /* Inset the thumb so it reads as an overlay rather than a filled gutter. */
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  min-height: 32px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover,
+.session-tree::-webkit-scrollbar-thumb:hover,
+.filepane-list::-webkit-scrollbar-thumb:hover,
+.key-list::-webkit-scrollbar-thumb:hover,
+.net-results::-webkit-scrollbar-thumb:hover,
+.modal::-webkit-scrollbar-thumb:hover,
+.editor-area::-webkit-scrollbar-thumb:hover,
+.macro-preview::-webkit-scrollbar-thumb:hover,
+.tool-body::-webkit-scrollbar-thumb:hover {
+  background: var(--scroll-thumb-hover);
+  background-clip: padding-box;
+}
+
+/* The ribbon has a dozen buttons; a narrow window must scroll, not clip. */
+.ribbon {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.ribbon::-webkit-scrollbar {
+  display: none;
+}
+
+.ribbon-btn {
+  flex: none;
+}
+
+/* ---------- jump to bottom ---------- */
+
+.jump-bottom {
+  position: absolute;
+  right: 22px;
+  bottom: 14px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-raised);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  font-size: var(--text-label);
+  box-shadow: 0 6px 18px var(--shadow);
+}
+
+.jump-bottom:hover {
+  background: var(--hover);
+}
+
+/* ---------- tunnel explainer ---------- */
+
+.tunnel-explain {
+  background: var(--bg-input);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.tunnel-flow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 9px;
+  flex-wrap: wrap;
+}
+
+.flow-node {
+  flex: 1;
+  min-width: 96px;
+  padding: 7px 9px;
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  font-size: var(--text-label);
+  line-height: 1.35;
+  white-space: pre-line;
+  text-align: center;
+  font-family: var(--mono-font);
+}
+
+.flow-node.via {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.flow-arrow {
+  align-self: center;
+  color: var(--text-dim);
+}
+
+.tunnel-summary {
+  margin: 0 0 9px;
+  font-size: var(--text-body);
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.tunnel-summary code,
+.tunnel-explain code {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xs);
+  padding: 0 4px;
+}
+
+.tunnel-summary strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---------- macro editor ---------- */
+
+.step-table {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.step-head,
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+}
+
+.step-head {
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  position: sticky;
+  top: 0;
+  background: var(--bg-chrome);
+}
+
+.step-row {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.step-row:last-child {
+  border-bottom: none;
+}
+
+.step-num {
+  width: 20px;
+  flex: none;
+  font-size: var(--text-label);
+  color: var(--text-dim);
+  text-align: right;
+}
+
+.step-delay-h {
+  width: 74px;
+  flex: none;
+}
+
+.step-delay {
+  width: 74px;
+  flex: none;
+  font-size: var(--text-label);
+  padding: 3px 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.step-data {
+  flex: 1;
+  font-size: var(--text-label);
+  padding: 3px 6px;
+}
+
+.icon-btn.danger {
+  color: var(--danger);
+}
+
+/* ---------- macro run targets ---------- */
+
+.run-head {
+  font-size: var(--text-body);
+  margin-bottom: 9px;
+}
+
+.target-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  max-height: 150px;
+  overflow-y: auto;
+  background: var(--bg-input);
+}
+
+.target-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 9px;
+  font-size: var(--text-body);
+  border-bottom: 1px solid var(--border-soft);
+  cursor: pointer;
+}
+
+.target-row:last-child {
+  border-bottom: none;
+}
+
+.target-row input {
+  width: auto;
+}
+
+.target-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-state {
+  margin-left: auto;
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.target-state.good {
+  color: var(--ok);
+}
+
+.target-state.bad {
+  color: var(--danger);
+}
+
+/* ---------- tools workspace ---------- */
+
+.modal.tools-modal {
+  width: 940px;
+  max-width: 94vw;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 86vh;
+  overflow: hidden;
+}
+
+.tools-layout {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.tools-nav {
+  width: 190px;
+  flex: none;
+  border-right: 1px solid var(--border);
+  padding: 10px 6px;
+  overflow-y: auto;
+  background: var(--bg-raised);
+}
+
+.tools-group {
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+  padding: 10px 8px 4px;
+}
+
+.tools-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 9px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-body);
+  color: var(--text-dim);
+}
+
+.tools-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.tools-item.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 550;
+}
+
+.tools-body {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 18px;
+  overflow-y: auto;
+}
+
+.tools-body h2 {
+  margin: 0 0 12px;
+}
+
+.modal.tools-modal .modal-actions {
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+  margin: 0;
+}
+
+/* ---------- tool tables ---------- */
+
+.tool-table {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.tool-thead,
+.tool-trow {
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  padding: 5px 9px;
+}
+
+.tool-thead {
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+.tool-tbody {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.tool-trow {
+  border-bottom: 1px solid var(--border-soft);
+  font-size: var(--text-body);
+}
+
+.tool-trow:last-child {
+  border-bottom: none;
+}
+
+.tool-trow.clickable {
+  cursor: pointer;
+}
+
+.tool-trow.clickable:hover,
+.tool-trow:hover {
+  background: var(--hover);
+}
+
+.tool-trow .mono,
+.tool-thead .mono {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+}
+
+.tool-trow .dim {
+  color: var(--text-dim);
+}
+
+.tool-trow .ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proc-grid {
+  grid-template-columns: 62px 88px 56px 74px 1fr 118px;
+}
+.disk-grid {
+  grid-template-columns: 1fr 110px 90px 90px;
+}
+.port-grid {
+  grid-template-columns: 62px 1fr 62px 88px 1.4fr;
+}
+.ascii-grid {
+  grid-template-columns: 56px 66px 56px 1fr 56px;
+}
+.brew-grid {
+  grid-template-columns: 1fr 160px 68px;
+}
+
+.proc-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+/* ---------- diff output ---------- */
+
+.diff-out {
+  margin: 12px 0 0;
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  line-height: 1.5;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  max-height: 340px;
+  overflow: auto;
+  white-space: pre;
+}
+
+.diff-add {
+  color: var(--ok);
+}
+.diff-del {
+  color: var(--danger);
+}
+.diff-hunk {
+  color: var(--accent);
+}
+
+/* ---------- split panes ---------- */
+
+/*
+ * Panes are absolutely positioned over the terminal area rather than being
+ * separate React subtrees: a terminal must stay mounted for its whole life, and
+ * re-parenting one would unmount it and drop the session.
+ */
+.terminal-pane.in-split {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 18px 0 2px 4px;
+  overflow: hidden;
+}
+
+.terminal-pane.in-split.focused {
+  border-color: var(--accent);
+}
+
+.pane-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 17px;
+  padding: 0 7px;
+  font-size: var(--text-micro);
+  line-height: 17px;
+  color: var(--text-dim);
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.terminal-pane.in-split.focused .pane-label {
+  color: var(--text);
+}
+
+/* ---------- multiexec ---------- */
+
+.multiexec-banner {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: var(--radius-xl);
+  background: var(--warn);
+  color: var(--warn-ink);
+  font-size: var(--text-label);
+  font-weight: 600;
+  box-shadow: 0 4px 14px var(--shadow);
+}
+
+.ribbon-badge.multi {
+  background: var(--warn);
+  color: var(--warn-ink);
+}
+
+/* ---------- compact mode ---------- */
+
+/* Compact mode takes both bars away by not rendering them, so there is no
+   hidden-but-present ribbon to reason about — `.chrome` simply collapses. */
+
+/* Escape hatch: in compact mode the ribbon is hidden, so the View menu needs a
+   door that is not inside the thing it hides. */
+.new-tab.compact-view {
+  margin-left: auto;
+  padding: 0 14px;
+  color: var(--accent);
+}

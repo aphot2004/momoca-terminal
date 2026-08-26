@@ -1,0 +1,15 @@
+node_modules/
+out/
+release/
+dist/
+.DS_Store
+*.log
+test/.artifacts/
+
+# Local design-review evidence: screenshots of the running app, which show the
+# maintainer's real saved sessions. Never commit these.
+.impeccable/review/
+.impeccable/hook.cache.json
+
+# TypeScript incremental build state
+*.tsbuildinfo

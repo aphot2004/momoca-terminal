@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="MoMoca">
+  <!--
+    The app mark. One lit element on a calibrated dark face: the icon obeys the
+    system's own Live-Thing Rule, so the caret is the only thing in Cursor Blue
+    and everything else is structure. The bezel hairline and the calibration
+    ticks carry the Instrument Panel at large sizes and dissolve below 32px,
+    where the chevron and the caret are all that survive — which is the point.
+  -->
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b1f2b" />
+      <stop offset="1" stop-color="#0e1017" />
+    </linearGradient>
+  </defs>
+
+  <!-- Art sits in the 824px square macOS reserves, centred in the 1024 canvas. -->
+  <rect x="100" y="100" width="824" height="824" rx="184" fill="url(#face)" />
+  <rect
+    x="102.5"
+    y="102.5"
+    width="819"
+    height="819"
+    rx="181.5"
+    fill="none"
+    stroke="#262c3d"
+    stroke-width="5"
+  />
+  <!-- The bezel: an inner hairline, the same 1px language the chrome uses. -->
+  <rect
+    x="146"
+    y="146"
+    width="732"
+    height="732"
+    rx="150"
+    fill="none"
+    stroke="#262c3d"
+    stroke-width="6"
+  />
+
+  <g transform="translate(17 4)">
+    <!-- Calibration: a readout baseline the prompt and the caret both stand on,
+         with ticks hanging below so nothing collides with the glyphs. -->
+    <path d="M214 680h560" stroke="#262c3d" stroke-width="9" stroke-linecap="round" />
+    <g fill="#262c3d">
+      <rect x="210" y="684" width="8" height="22" rx="2" />
+      <rect x="350" y="684" width="8" height="22" rx="2" />
+      <rect x="490" y="684" width="8" height="22" rx="2" />
+      <rect x="630" y="684" width="8" height="22" rx="2" />
+      <rect x="770" y="684" width="8" height="22" rx="2" />
+    </g>
+
+    <!-- The prompt, quiet: structure, not the live thing. -->
+    <path
+      d="M300 360L470 504L300 649"
+      fill="none"
+      stroke="#8b93a8"
+      stroke-width="62"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- The caret: the only lit element on the face, at a terminal cell's 1:2. -->
+    <rect x="560" y="360" width="160" height="320" rx="10" fill="#7aa2f7" />
+  </g>
+</svg>
