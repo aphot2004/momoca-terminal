@@ -54,9 +54,20 @@ npm install && npm run dev
 | `npm run dist` | Universal (arm64 + x64) DMG into `release/` |
 
 `npm run dist` rebuilds `node-pty` and `serialport` from source for both
-architectures, so it needs Xcode's command line tools (`xcode-select --install`)
-and a Python that node-gyp can drive — see the macOS notes below, because a
-current Python will fail on its own.
+architectures. Three prerequisites, and each one fails in its own confusing way
+if you skip it:
+
+```bash
+xcode-select --install                      # the compiler itself
+python3 -m pip install setuptools           # Python 3.12+ removed distutils, which node-gyp imports
+npm install-scripts approve node-pty ssh2   # npm 11+ blocks install scripts by default
+```
+
+Without setuptools, packaging dies with `ModuleNotFoundError: No module named
+'distutils'`. Without the script approval, `npm install` looks like it worked
+but never built the native modules. Do not try to fix the first one by pinning
+node-gyp forward: `@electron/rebuild` pins `node-gyp@^9` and drives its
+programmatic API, and a newer major makes its worker hang with no output at all.
 
 Signing is optional. Without a Developer ID the DMG still builds and runs; it is
 simply unsigned, and users need the right-click-Open dance above.
@@ -316,13 +327,15 @@ in the main process through `webContents.capturePage()` instead.
   rm -rf node_modules/electron/dist && unzip -q ~/Library/Caches/electron/*/electron-*-darwin-arm64.zip -d node_modules/electron/dist && printf 'Electron.app/Contents/MacOS/Electron' > node_modules/electron/path.txt
   ```
 
-- **`npm run dist` fails on Python 3.12 and newer** with
-  `ModuleNotFoundError: No module named 'distutils'`. The bundled node-gyp
-  (9.x) still imports `distutils`, which Python removed in 3.12. `setuptools`
-  puts it back, and a throwaway venv keeps it out of your system Python:
+- **A partial Electron download poisons the cache silently.** If a packaging
+  run is interrupted mid-download, `~/Library/Caches/electron/` can keep a
+  truncated zip that nothing validates. Every later build then stalls forever in
+  `app-builder unpack-electron` — holding the file open, at 0% CPU, with no
+  error. A healthy `darwin-arm64` zip for Electron 33 is ~95 MB; the broken one
+  here was 448 MB. Check it and delete it:
 
   ```bash
-  python3 -m venv /tmp/gypvenv && /tmp/gypvenv/bin/pip install setuptools && PYTHON=/tmp/gypvenv/bin/python npm run dist
+  unzip -t ~/Library/Caches/electron/electron-v*-darwin-arm64.zip || rm ~/Library/Caches/electron/electron-v*-darwin-arm64.zip
   ```
 
 - Packaging uses the hardened runtime; `build/entitlements.mac.plist` grants the

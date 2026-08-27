@@ -31,7 +31,9 @@ function migrateStore(): void {
   if (existsSync(join(target, 'sessions.json'))) return
 
   const parent = dirname(target)
-  for (const previous of ['mobaxterm-clone', 'MobaClone']) {
+  // 'momoca' is the dev store (package name); 'MoMoca' is the packaged one
+  // (product name). They are different directories, so each can seed the other.
+  for (const previous of ['momoca', 'MoMoca', 'mobaxterm-clone', 'MobaClone']) {
     const source = join(parent, previous)
     if (source === target || !existsSync(join(source, 'sessions.json'))) continue
 
