@@ -6,6 +6,9 @@ import { FileProperties, modeToRwx } from './FileProperties'
 import { usePrompt } from './InputDialog'
 import {
   IconCheck,
+  IconFileRow,
+  IconFolderRow,
+  IconSymlinkRow,
   IconDelete,
   IconDownload,
   IconGoUp,
@@ -401,7 +404,9 @@ export function FileBrowser({ tabId, cwd }: Props) {
       ) : (
         <div className="filepane-list" onContextMenu={(e) => openMenu(e, null)}>
           <button className="file-row" onDoubleClick={() => setPath(parent)}>
-            <span className="glyph">📁</span>
+            <span className="glyph">
+              <IconFolderRow />
+            </span>
             <span className="fname">..</span>
           </button>
 
@@ -415,7 +420,13 @@ export function FileBrowser({ tabId, cwd }: Props) {
               title={`${entry.path}\n${modeToRwx(entry.mode)}  ${formatSize(entry.size)}`}
             >
               <span className="glyph">
-                {entry.type === 'directory' ? '📁' : entry.type === 'symlink' ? '↗' : '📄'}
+                {entry.type === 'directory' ? (
+                  <IconFolderRow />
+                ) : entry.type === 'symlink' ? (
+                  <IconSymlinkRow />
+                ) : (
+                  <IconFileRow />
+                )}
               </span>
               <span className="fname">{entry.name}</span>
               {entry.type === 'file' && <span className="size">{formatSize(entry.size)}</span>}

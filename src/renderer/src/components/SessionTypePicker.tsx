@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { KIND_REQUIREMENT, type SessionKind, type ToolCheck } from '@shared/types'
+import { SessionTypeIcon } from './SessionTypeIcons'
 
 interface Props {
   value: SessionKind
@@ -11,24 +12,22 @@ interface Props {
 interface TypeDef {
   kind: SessionKind
   label: string
-  glyph: string
-  color: string
   note: string
 }
 
 const TYPES: TypeDef[] = [
-  { kind: 'ssh', label: 'SSH', glyph: '⇄', color: '#4c7ce0', note: 'Shell + SFTP in a tab' },
-  { kind: 'telnet', label: 'Telnet', glyph: '⌁', color: '#5aa9e0', note: 'Unencrypted terminal' },
-  { kind: 'rsh', label: 'Rsh', glyph: '⇉', color: '#9a8fb0', note: 'Legacy remote shell' },
-  { kind: 'xdmcp', label: 'Xdmcp', glyph: '✳', color: '#c98fe0', note: 'Remote X desktop' },
-  { kind: 'rdp', label: 'RDP', glyph: '🖵', color: '#e07a5f', note: 'Windows remote desktop' },
-  { kind: 'vnc', label: 'VNC', glyph: '▦', color: '#e0a83c', note: 'Screen sharing' },
-  { kind: 'ftp', label: 'FTP', glyph: '⇅', color: '#8fbf7a', note: 'Plain file transfer' },
-  { kind: 'sftp', label: 'SFTP', glyph: '🗀', color: '#e0a83c', note: 'File browser only' },
-  { kind: 'serial', label: 'Serial', glyph: '⚟', color: '#6fd0c0', note: 'Serial console' },
-  { kind: 'local', label: 'Shell', glyph: '›_', color: '#9ece6a', note: 'Local login shell' },
-  { kind: 'browser', label: 'Browser', glyph: '◍', color: '#7dcfff', note: 'Opens your browser' },
-  { kind: 'mosh', label: 'Mosh', glyph: '≈', color: '#bb9af7', note: 'Roaming SSH' }
+  { kind: 'ssh', label: 'SSH', note: 'Shell + SFTP in a tab' },
+  { kind: 'telnet', label: 'Telnet', note: 'Unencrypted terminal' },
+  { kind: 'rsh', label: 'Rsh', note: 'Legacy remote shell' },
+  { kind: 'xdmcp', label: 'Xdmcp', note: 'Remote X desktop' },
+  { kind: 'rdp', label: 'RDP', note: 'Windows remote desktop' },
+  { kind: 'vnc', label: 'VNC', note: 'Screen sharing' },
+  { kind: 'ftp', label: 'FTP', note: 'Plain file transfer' },
+  { kind: 'sftp', label: 'SFTP', note: 'File browser only' },
+  { kind: 'serial', label: 'Serial', note: 'Serial console' },
+  { kind: 'local', label: 'Shell', note: 'Local login shell' },
+  { kind: 'browser', label: 'Browser', note: 'Opens your browser' },
+  { kind: 'mosh', label: 'Mosh', note: 'Roaming SSH' }
 ]
 
 /**
@@ -90,8 +89,8 @@ export function SessionTypePicker({ value, onChange, onOpenGuide }: Props) {
               }
               onClick={() => available && onChange(type.kind)}
             >
-              <span className="type-glyph" style={{ color: type.color }}>
-                {type.glyph}
+              <span className="type-glyph">
+                <SessionTypeIcon kind={type.kind} />
               </span>
               <span className="type-label">{type.label}</span>
               {!available && <span className="type-missing" aria-hidden="true" />}

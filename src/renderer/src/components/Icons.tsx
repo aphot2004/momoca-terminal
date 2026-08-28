@@ -385,3 +385,47 @@ export function IconFolderSmall({ size = 14 }: IconProps) {
     </svg>
   )
 }
+
+/**
+ * File-row marks. Monochrome and drawn, inheriting the row's colour: these
+ * replace 📁 and 📄, which rendered as full-colour emoji that ignored the theme
+ * and shifted with the platform's font.
+ */
+const row = (size: number) => ({
+  width: size,
+  height: size,
+  viewBox: '0 0 16 16',
+  fill: 'none' as const,
+  stroke: 'currentColor',
+  strokeWidth: 1.3,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+  'aria-hidden': true
+})
+
+export function IconFolderRow({ size = 14 }: IconProps) {
+  return (
+    <svg {...row(size)}>
+      <path d="M1.6 12.4V3.9a1 1 0 0 1 1-1h3.2l1.4 1.7h6.2a1 1 0 0 1 1 1v6.8a1 1 0 0 1-1 1H2.6a1 1 0 0 1-1-1z" />
+    </svg>
+  )
+}
+
+export function IconFileRow({ size = 14 }: IconProps) {
+  return (
+    <svg {...row(size)}>
+      <path d="M3.4 1.9h5.3l3.9 3.9v8.3a1 1 0 0 1-1 1h-8.2a1 1 0 0 1-1-1V2.9a1 1 0 0 1 1-1z" />
+      <path d="M8.6 1.9v4h3.9" />
+    </svg>
+  )
+}
+
+export function IconSymlinkRow({ size = 14 }: IconProps) {
+  return (
+    <svg {...row(size)}>
+      <path d="M3.4 1.9h5.3l3.9 3.9v8.3a1 1 0 0 1-1 1h-8.2a1 1 0 0 1-1-1V2.9a1 1 0 0 1 1-1z" />
+      <path d="M8.6 1.9v4h3.9" />
+      <path d="M5.6 11.6l4-4M7.4 7.6h2.2v2.2" />
+    </svg>
+  )
+}
