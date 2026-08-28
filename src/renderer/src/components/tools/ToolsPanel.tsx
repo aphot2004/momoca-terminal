@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useEscape } from '../../hooks/useEscape'
 import { AsciiTable } from './AsciiTable'
 import { BrewPackages } from './BrewPackages'
 import { DiffTool } from './DiffTool'
@@ -68,6 +69,7 @@ const GROUPS: { title: string; items: Entry[] }[] = [
 ]
 
 export function ToolsPanel({ onClose, onRunLocal, onKeysChanged, initial }: Props) {
+  useEscape(onClose)
   const [tool, setTool] = useState<ToolId>(initial ?? 'processes')
 
   const active = GROUPS.flatMap((g) => g.items).find((i) => i.id === tool)

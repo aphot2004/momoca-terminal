@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import type { ToolCheck, ToolId } from '@shared/types'
 
 interface Props {
@@ -32,6 +33,7 @@ function CommandLine({ command }: { command: string }) {
  * session can't launch for want of a dependency.
  */
 export function ToolGuide({ focus, onClose }: Props) {
+  useEscape(onClose)
   const [tools, setTools] = useState<ToolCheck[]>([])
   const [open, setOpen] = useState<ToolId | null>(focus ?? null)
   const [busy, setBusy] = useState(true)

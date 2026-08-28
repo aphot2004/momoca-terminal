@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import type { UnixTool, UnixToolGroup } from '@shared/types'
 
 interface Props {
@@ -17,6 +18,7 @@ const GROUPS: { id: UnixToolGroup; label: string }[] = [
 ]
 
 export function UnixTools({ onClose, onRun }: Props) {
+  useEscape(onClose)
   const [tools, setTools] = useState<UnixTool[] | null>(null)
   const [group, setGroup] = useState<UnixToolGroup>('files')
   const [onlyMissing, setOnlyMissing] = useState(false)

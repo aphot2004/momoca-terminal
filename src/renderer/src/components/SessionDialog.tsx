@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import type { AuthMethod, ImportedKey, SavedSession, SessionKind, ToolId } from '@shared/types'
 import { useExclusive } from '../hooks/useExclusive'
 import { SessionTypePicker } from './SessionTypePicker'
@@ -75,6 +76,7 @@ export function SessionDialog({
   onManageKeys,
   onOpenGuide
 }: Props) {
+  useEscape(onCancel)
   const [draft, setDraft] = useState<SavedSession>(initial ?? BLANK)
   const [password, setPassword] = useState('')
   const [keys, setKeys] = useState<ImportedKey[]>([])

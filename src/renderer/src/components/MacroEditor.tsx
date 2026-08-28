@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import { MACRO_SPEEDS, type Macro, type MacroStep } from '@shared/types'
 import { decodeData, encodeData, macroSpeed } from '../macro-recorder'
 
@@ -15,6 +16,7 @@ interface DraftStep {
 }
 
 export function MacroEditor({ macro, onSave, onCancel }: Props) {
+  useEscape(onCancel)
   const [name, setName] = useState(macro.name)
   const [speed, setSpeed] = useState(macroSpeed(macro))
   const [steps, setSteps] = useState<DraftStep[]>(

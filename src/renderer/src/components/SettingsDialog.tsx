@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import { useView, viewActions, type ButtonSize } from '../view-state'
 import type { ThemeName } from '../theme'
 
@@ -45,6 +46,7 @@ export function SettingsDialog({
   onToggleSidebar,
   onClose
 }: Props) {
+  useEscape(onClose)
   const [tab, setTab] = useState<SettingsTab>(initialTab)
   const view = useView()
 

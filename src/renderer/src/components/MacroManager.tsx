@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import { MACRO_SPEEDS, type Macro, type MacroRunTarget } from '@shared/types'
 import { describeSteps, macroSpeed, playMacroOnTargets, startRecording } from '../macro-recorder'
 import { MacroEditor } from './MacroEditor'
@@ -20,6 +21,7 @@ interface RunState {
 }
 
 export function MacroManager({ targets, activeTabId, onClose }: Props) {
+  useEscape(onClose)
   const [macros, setMacros] = useState<Macro[]>([])
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Macro | null>(null)

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import type { SftpEntry } from '@shared/types'
 
 interface Props {
@@ -24,6 +25,7 @@ const PERMS = [
 ] as const
 
 export function FileProperties({ tabId, entry, onClose, onChanged }: Props) {
+  useEscape(onClose)
   const [mode, setMode] = useState(entry.mode & 0o777)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)

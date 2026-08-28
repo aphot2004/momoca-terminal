@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import type { DiscoveredHost, PingSample, PingSummary, PortResult } from '@shared/types'
 
 interface Props {
@@ -24,6 +25,7 @@ function ms(value: number | null): string {
 }
 
 export function NetworkTools({ onClose, onConnect, initialTab = 'ping' }: Props) {
+  useEscape(onClose)
   const [tab, setTab] = useState<Tab>(initialTab)
 
   // Shared job control: only one scan/ping/sweep at a time.

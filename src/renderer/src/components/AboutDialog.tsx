@@ -1,3 +1,4 @@
+import { useEscape } from '../hooks/useEscape'
 interface Props {
   sessionCount: number
   keyCount: number
@@ -6,6 +7,7 @@ interface Props {
 
 /** Help ▸ About. MobaXterm's about box, minus the licence nag. */
 export function AboutDialog({ sessionCount, keyCount, onClose }: Props) {
+  useEscape(onClose)
   return (
     <div className="scrim" onMouseDown={onClose}>
       <div className="modal narrow" onMouseDown={(e) => e.stopPropagation()}>

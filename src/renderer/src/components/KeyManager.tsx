@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import type { ImportedKey } from '@shared/types'
 import { useExclusive } from '../hooks/useExclusive'
 
@@ -15,6 +16,7 @@ interface PendingImport {
 }
 
 export function KeyManager({ onClose, onChanged }: Props) {
+  useEscape(onClose)
   const [keys, setKeys] = useState<ImportedKey[]>([])
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)

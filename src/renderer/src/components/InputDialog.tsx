@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactNode } from 'react'
+import { useEscape } from './../hooks/useEscape'
 
 interface Request {
   title: string
@@ -55,6 +56,10 @@ export function usePrompt(): {
     [request]
   )
 
+  // Was handled on the input's own keydown, so Escape did nothing whenever
+  // focus sat anywhere else in the dialog.
+  useEscape(request ? () => settle(null) : null)
+
   const dialog = request ? (
     <div className="scrim" onMouseDown={() => settle(null)}>
       <div className="modal narrow" onMouseDown={(e) => e.stopPropagation()}>
@@ -69,7 +74,6 @@ export function usePrompt(): {
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && value.trim()) settle(value.trim())
-              if (e.key === 'Escape') settle(null)
             }}
             onFocus={(e) => e.currentTarget.select()}
           />

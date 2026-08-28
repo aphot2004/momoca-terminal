@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import type { SavedSession, Tunnel, TunnelStatus, TunnelType } from '@shared/types'
 import { useExclusive } from '../hooks/useExclusive'
 import { TunnelExplainer } from './TunnelExplainer'
@@ -25,6 +26,7 @@ const TYPE_LABEL: Record<TunnelType, string> = {
 }
 
 export function TunnelManager({ sessions, onClose }: Props) {
+  useEscape(onClose)
   const sshSessions = sessions.filter((s) => s.kind === 'ssh')
 
   const [tunnels, setTunnels] = useState<Tunnel[]>([])

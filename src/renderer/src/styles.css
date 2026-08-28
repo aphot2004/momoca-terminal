@@ -120,6 +120,15 @@ button:disabled {
   cursor: default;
 }
 
+/* Keyboard focus was invisible on every button: inputs moved their border to
+   the accent on focus, buttons showed nothing at all, so tabbing through a
+   dialog left you guessing. :focus-visible keeps it off mouse clicks. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
 input,
 select,
 textarea {

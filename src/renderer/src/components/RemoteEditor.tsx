@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import { useExclusive } from '../hooks/useExclusive'
 
 interface Props {
@@ -52,6 +53,9 @@ export function RemoteEditor({ tabId, path, onClose }: Props) {
       setState('ready')
     }
   }
+
+  // close() confirms before discarding, so Escape cannot lose an edit.
+  useEscape(() => close())
 
   const close = () =>
     void exclusive(() => {

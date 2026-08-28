@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 import type { VaultStatus } from '@shared/types'
 
 interface Props {
@@ -9,6 +10,9 @@ interface Props {
 }
 
 export function VaultDialog({ intent, onClose, onChanged }: Props) {
+  // The unlock prompt is deliberately undismissable — it is the gate at
+  // startup — so only the settings intent closes on Escape.
+  useEscape(intent === 'settings' ? onClose : null)
   const [status, setStatus] = useState<VaultStatus | null>(null)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useEscape } from '../hooks/useEscape'
 
 export interface SecretRequest {
   type: 'secret'
@@ -35,6 +36,11 @@ export function PromptOverlay({ request, onDone }: { request: PromptRequest; onD
     window.api.prompts.respond(request.requestId, value)
     onDone()
   }
+
+  // Escape declines, and declining means answering: a host key is rejected and
+  // an auth prompt is cancelled, so the connection fails cleanly instead of
+  // hanging on a reply that never arrives.
+  useEscape(() => respond(request.type === 'hostkey' ? false : null))
 
   if (request.type === 'hostkey') {
     return (
