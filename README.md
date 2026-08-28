@@ -14,6 +14,28 @@ engineering of it, and it is not affiliated with or endorsed by Mobatek.
 Electron + TypeScript + React, `xterm.js` for rendering, `ssh2` for the protocol,
 `node-pty` for local shells. macOS only.
 
+## Support — you really don't have to
+
+**MoMoca is free, and it stays free.** Nothing is held back behind a payment,
+there is no trial, no licence key, no nag screen, and there never will be. Use
+it as much as you like and give nothing back; that is the intended way to use
+it.
+
+This was vibe-coded for the fun of building it, not as a business. So please
+don't feel any obligation here. **You do not need to donate.** If it saves you
+an afternoon and you feel like buying me a coffee, the addresses are below — and
+if you never do, absolutely nothing changes about the app you get.
+
+| | |
+|---|---|
+| **BTC** | `bc1qelkglht57978yz25lc5xhxq5rafnd4f7dn86st` |
+| **Monero** | `84aNNziwrWHBv1gtpNMFnL6Zsi1badKocPNGkM4f7qQJASMyWC4zhMmVAoY3Sw3p5PagcQecCTti2LQ6r2CJEqR4BMsHAsN` |
+| **Solana** | `88zgqNrSP2jezH5JwQMDdN1esx2vbxYydj8Fnb6wkDpQ` |
+| **Ethereum** | `0x32F68E49810Bd60A91bBAb86c40bB376bE1a788A` |
+
+Donations buy nothing: no priority, no support, no influence over what gets
+built. They're a thank-you, nothing more.
+
 ![The MoMoca window: menu bar, buttons bar, session sidebar and a terminal](docs/screenshot-terminal.png)
 
 <table>
@@ -161,6 +183,12 @@ simply unsigned, and users need the right-click-Open dance above.
   in memory. scrypt-derived key, AES-256-GCM per entry, and
   switching modes re-encrypts rather than orphaning anything. There is
   deliberately no IPC that reads a secret back out to the renderer.
+- **Folder upload** — recursive, with live progress, carrying the same guards
+  as the download side: symlinks are skipped rather than followed, each
+  directory's real path is recorded so a cycle cannot loop, everything examined
+  counts toward one 50,000-entry ceiling, and depth caps at 32. Parent
+  directories are created before their children, so an interrupted upload
+  leaves a partial tree rather than orphaned files.
 - **Folder download** — recursive, with live progress. Symlinks are skipped
   rather than followed, cycles are caught by resolving each directory, and a
   50,000-entry ceiling bounds the walk even if a server misdescribes its own
@@ -202,8 +230,11 @@ simply unsigned, and users need the right-click-Open dance above.
   `lsof`, Wake-on-LAN magic packets, and a tcpdump capture builder. Anything
   needing root or long-running output is handed to a real terminal rather than
   pretended at in a panel.
-- **MultiExec** — type once, and the keystrokes go to every terminal currently
-  on screen, with a banner naming how many. Off by default and never persisted:
+- **MultiExec** — type once, and the keystrokes reach several terminals at
+  once, with a banner naming how many. Right-click the button to choose the
+  targets: the panes on screen, every open tab, or a hand-picked set ticked tab
+  by tab. Closing a tab drops it from that set, so a keystroke never goes to a
+  terminal that is gone. Off by default and never persisted:
   restoring broadcast-to-all on launch would be a nasty surprise.
 - **Split views** — multitab, 2 terminals side by side or stacked, or a 4-way
   grid. Panes are *positioned* over the
@@ -221,7 +252,13 @@ simply unsigned, and users need the right-click-Open dance above.
   missing.
 - **Diagnostics bar** — **reports the server you're connected to**, not this Mac:
   CPU, memory, disk, network, load and uptime are polled from the SSH host over
-  an exec channel every 3s. The scope chip on the left flips to local metrics
+  an exec channel every 3s. **Hover any meter** for the detail behind it: CPU
+  breaks into individual cores, RAM into the top processes by resident size,
+  Disk into bytes read and written plus every volume's used/total/free, Net into
+  each interface with its address and counters, Load into the top processes by
+  CPU, and Up into every unit from seconds to years. The detail is gathered on
+  the same poll as the summary, because a probe fired on mouse-over would land
+  after the pointer had moved on. The scope chip on the left flips to local metrics
   when you want them, and falls back to local automatically with no SSH tab
   focused. Reads `/proc` on Linux and `vm_stat`/`sysctl` on a BSD or macOS host.
 - **SSH key import** — bring keys in from a file or by pasting them. Each key is
@@ -255,12 +292,8 @@ Deliberately out of scope for the first pass, roughly in order of cost:
 
 | Feature | Approach when you want it |
 |---|---|
-| Split panes | Layout tree around the existing `TerminalPane` |
-| MultiExec (type to all tabs) | Fan a single `term:write` out across selected tabs |
 | Drag & drop upload | HTML5 drop target on the file pane, then the existing upload IPC |
 | Syntax highlighting in the editor | Swap the textarea for CodeMirror 6; the IPC already fits |
-| Folder *upload* | Mirror `downloadDirectory` with `fastPut`, reusing the same guards |
-| Per-process list (remote `top`) | Another section in the stats probe, rendered as a table |
 | Embedded VNC / RDP | `noVNC` + a WS bridge; RDP would need `guacd`. Today both hand off to a native client |
 
 ## Layout
@@ -345,3 +378,9 @@ in the main process through `webContents.capturePage()` instead.
 - Packaging uses the hardened runtime; `build/entitlements.mac.plist` grants the
   JIT and unsigned-memory entitlements Electron and `node-pty` need. Signing and
   notarization still require your own Developer ID.
+
+## License
+
+[MIT](LICENSE). Use it, fork it, ship it, sell it — just keep the copyright
+notice. The open-source components MoMoca is built on — Electron, xterm.js,
+ssh2, node-pty, React and others — remain under their own licenses.

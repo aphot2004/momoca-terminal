@@ -429,3 +429,13 @@ export function IconSymlinkRow({ size = 14 }: IconProps) {
     </svg>
   )
 }
+
+/** Upload, but of a whole folder: the arrow rises out of the folder's mouth. */
+export function IconUploadFolder({ size = 16 }: IconProps) {
+  return (
+    <svg {...row(size)}>
+      <path d="M1.6 12.9V4.4a1 1 0 0 1 1-1h3.2l1.4 1.7h6.2a1 1 0 0 1 1 1v6.8a1 1 0 0 1-1 1H2.6a1 1 0 0 1-1-1z" />
+      <path d="M8 12.2V7.4M8 7.4 6.2 9.2M8 7.4l1.8 1.8" />
+    </svg>
+  )
+}

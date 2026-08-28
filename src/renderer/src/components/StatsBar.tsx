@@ -1,4 +1,6 @@
+import { useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { RemoteStats, SystemStats } from '@shared/types'
+import { StatsDetailPopover, type MetricId } from './StatsDetailPopover'
 
 function bytes(value: number, digits = 1): string {
   if (value < 1024) return `${Math.round(value)} B`
@@ -32,16 +34,23 @@ function Meter({
   label,
   ratio,
   value,
-  title
+  title,
+  onHover
 }: {
   label: string
   ratio: number
   value: string
   title?: string
+  onHover?: (rect: DOMRect | null) => void
 }) {
   const clamped = Math.min(1, Math.max(0, ratio))
   return (
-    <div className="metric" title={title}>
+    <div
+      className="metric hoverable"
+      title={title}
+      onMouseEnter={(e) => onHover?.(e.currentTarget.getBoundingClientRect())}
+      onMouseLeave={() => onHover?.(null)}
+    >
       <span className="metric-label">{label}</span>
       <span className="meter">
         <span className={`meter-fill ${severity(clamped)}`} style={{ width: `${clamped * 100}%` }} />
@@ -65,6 +74,16 @@ interface Props {
  * tab is focused, this Mac otherwise. The scope chip flips between the two.
  */
 export function StatsBar({ local, remote, showLocal, onToggleScope }: Props) {
+  const [hover, setHover] = useState<{ metric: MetricId; rect: DOMRect } | null>(null)
+  // A metric's own rectangle, captured on enter; null on leave.
+  const show = (metric: MetricId) => (rect: DOMRect | null) =>
+    setHover(rect ? { metric, rect } : (current) => (current?.metric === metric ? null : current))
+  const hoverProps = (metric: MetricId) => ({
+    className: 'metric hoverable',
+    onMouseEnter: (e: ReactMouseEvent<HTMLDivElement>) =>
+      show(metric)(e.currentTarget.getBoundingClientRect()),
+    onMouseLeave: () => show(metric)(null)
+  })
   const usingRemote = Boolean(remote) && !showLocal
   const stats: SystemStats | RemoteStats | null = usingRemote ? remote : local
 
@@ -103,20 +122,23 @@ export function StatsBar({ local, remote, showLocal, onToggleScope }: Props) {
         ratio={stats.cpu.usage}
         value={`${Math.round(stats.cpu.usage * 100)}%`}
         title={cores ? `${cores} cores` : undefined}
+        onHover={show('cpu')}
       />
       <Meter
         label="RAM"
         ratio={memRatio}
         value={`${bytes(stats.memory.used)} / ${bytes(stats.memory.total, 0)}`}
+        onHover={show('memory')}
       />
       <Meter
         label="Disk"
         ratio={diskRatio}
         value={`${bytes(stats.disk.used)} / ${bytes(stats.disk.total, 0)}`}
         title={`${Math.round(diskRatio * 100)}% of ${stats.disk.mount}`}
+        onHover={show('disk')}
       />
 
-      <div className="metric net" title="Throughput across all non-loopback interfaces">
+      <div {...hoverProps('network')} className="metric net hoverable" title="Throughput across all non-loopback interfaces">
         <span className="metric-label">Net</span>
         <span className="metric-value">
           <span className="net-rx">↓ {bytes(stats.network.rx)}/s</span>
@@ -124,15 +146,25 @@ export function StatsBar({ local, remote, showLocal, onToggleScope }: Props) {
         </span>
       </div>
 
-      <div className="metric" title="1, 5 and 15 minute load averages">
+      <div {...hoverProps('load')} title="1, 5 and 15 minute load averages">
         <span className="metric-label">Load</span>
         <span className="metric-value">{stats.load.map((n) => n.toFixed(2)).join('  ')}</span>
       </div>
 
-      <div className="metric" title="Uptime">
+      <div {...hoverProps('uptime')} title="Uptime">
         <span className="metric-label">Up</span>
         <span className="metric-value">{duration(stats.uptime)}</span>
       </div>
+
+      {hover && (
+        <StatsDetailPopover
+          metric={hover.metric}
+          detail={stats.detail}
+          uptime={stats.uptime}
+          cores={cores}
+          anchor={hover.rect}
+        />
+      )}
     </div>
   )
 }

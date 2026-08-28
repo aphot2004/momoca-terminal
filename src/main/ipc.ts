@@ -189,6 +189,33 @@ export function registerIpc(): void {
     }
   })
 
+  handle('sftp:uploadFolder', async (event, tabId: string, remoteDir: string) => {
+    const sftp = await registry.requireSftp(tabId)
+    const result = await dialog.showOpenDialog({
+      title: 'Upload folder',
+      properties: ['openDirectory']
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+
+    const reporter = new TransferReporter(event.sender, tabId, 'upload')
+    try {
+      const outcome = await sftpOps.uploadDirectory(
+        sftp,
+        result.filePaths[0],
+        remoteDir,
+        hooksFor(reporter)
+      )
+      reporter.finish(
+        `Uploaded ${outcome.files} file${outcome.files === 1 ? '' : 's'}` +
+          (outcome.skippedCount ? `, skipped ${outcome.skippedCount}` : '')
+      )
+      return outcome
+    } catch (err) {
+      reporter.fail(err instanceof Error ? err.message : String(err))
+      throw err
+    }
+  })
+
   handle('sftp:upload', async (event, tabId: string, remoteDir: string) => {
     const sftp = await registry.requireSftp(tabId)
     const result = await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })

@@ -10,7 +10,14 @@
  * A main-process suite rather than a CDP one: it needs sendInputEvent to
  * deliver a real key, and CDP cannot screenshot an occluded window anyway.
  */
-const { app, BrowserWindow } = require('electron')
+import { app, BrowserWindow } from 'electron'
+import { createRequire } from 'node:module'
+
+// The built main process is CommonJS, and this file is an ES module because of
+// its .mjs extension — which is what the other suites use. createRequire is the
+// bridge; a bare require() here throws "require is not defined in ES module
+// scope" before the app ever opens a window.
+const require = createRequire(import.meta.url)
 require('../../out/main/index.js')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 

@@ -133,6 +133,12 @@ const api = {
         entry
       ),
     upload: (tabId: string, remoteDir: string) => invoke<string[]>('sftp:upload', tabId, remoteDir),
+    uploadFolder: (tabId: string, remoteDir: string) =>
+      invoke<{ files: number; bytes: number; skipped: string[]; skippedCount: number } | null>(
+        'sftp:uploadFolder',
+        tabId,
+        remoteDir
+      ),
     onProgress: (handler: (p: TransferProgress) => void) => subscribe('sftp:progress', handler)
   },
 

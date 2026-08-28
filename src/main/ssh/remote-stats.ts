@@ -18,6 +18,13 @@ const PROBE = [
   'echo "#LOAD"; (cat /proc/loadavg 2>/dev/null || uptime)',
   'echo "#UP"; (cut -d. -f1 /proc/uptime 2>/dev/null || sysctl -n kern.boottime 2>/dev/null)',
   'echo "#NET"; (tail -n +3 /proc/net/dev 2>/dev/null || netstat -ibn 2>/dev/null)',
+  // --- detail for the hover popovers. Every one is optional: a host that
+  // cannot answer still reports the summary above it.
+  'echo "#CORES"; grep "^cpu[0-9]" /proc/stat 2>/dev/null',
+  'echo "#PSMEM"; (ps -eo rss=,pid=,comm= --sort=-rss 2>/dev/null || ps -axo rss=,pid=,comm= -r 2>/dev/null) | head -8',
+  'echo "#PSCPU"; (ps -eo pcpu=,pid=,comm= --sort=-pcpu 2>/dev/null || ps -axo pcpu=,pid=,comm= -r 2>/dev/null) | head -8',
+  'echo "#DFALL"; df -kP 2>/dev/null | tail -n +2',
+  'echo "#DISKIO"; cat /proc/diskstats 2>/dev/null',
   'echo "#END"'
 ].join('; ')
 
@@ -38,6 +45,75 @@ function section(output: string, name: string): string {
   const from = start + name.length + 2
   const next = output.indexOf('\n#', from - 1)
   return output.slice(from, next === -1 ? undefined : next).trim()
+}
+
+/** `ps` reports a path for many processes; the basename is what reads. */
+function shortName(command: string): string {
+  return (command || '').trim().split('/').pop() || command
+}
+
+/** Linux: the per-cpu lines of /proc/stat, for the per-core hover. */
+function parseCoreSamples(cores: string): Sample[] {
+  return cores
+    .split('\n')
+    .filter((line) => /^cpu\d/.test(line))
+    .map((line) => {
+      const values = line.trim().split(/\s+/).slice(1).map(Number)
+      const total = values.reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0)
+      return { idle: (values[3] ?? 0) + (values[4] ?? 0), total }
+    })
+}
+
+/** Both `ps` layouts put the number first, then pid, then the command. */
+function parseProcesses(output: string): { first: number; pid: number; name: string }[] {
+  return output
+    .split('\n')
+    .map((line) => /^\s*([\d.]+)\s+(\d+)\s+(.*)$/.exec(line.trim()))
+    .filter((m): m is RegExpExecArray => Boolean(m))
+    .map((m) => ({ first: Number(m[1]), pid: Number(m[2]), name: shortName(m[3]) }))
+}
+
+/** `df -kP` is POSIX-stable: blocks, used, available, capacity, mount. */
+function parseVolumes(output: string): { mount: string; device?: string; used: number; total: number }[] {
+  return output
+    .split('\n')
+    .map((line) => line.trim().split(/\s+/))
+    .filter((f) => f.length >= 6 && /^\d+$/.test(f[1] ?? ''))
+    .map((f) => ({
+      device: f[0],
+      mount: f.slice(5).join(' '),
+      used: Number(f[2]) * 1024,
+      total: Number(f[1]) * 1024
+    }))
+    .filter((v) => v.total > 0 && !v.mount.startsWith('/sys') && !v.mount.startsWith('/proc'))
+}
+
+/** Per-interface counters, from whichever of the two formats answered. */
+function parseInterfaces(output: string): { name: string; rx: number; tx: number }[] {
+  const out: { name: string; rx: number; tx: number }[] = []
+
+  // Linux /proc/net/dev: "eth0: rxbytes rxpkts ... txbytes ..."
+  for (const line of output.split('\n')) {
+    const match = /^\s*([\w.-]+):\s*(.*)$/.exec(line)
+    if (!match) continue
+    const values = match[2].trim().split(/\s+/).map(Number)
+    if (values.length < 9) continue
+    out.push({ name: match[1], rx: values[0] ?? 0, tx: values[8] ?? 0 })
+  }
+  if (out.length) return out.sort((a, b) => b.rx + b.tx - (a.rx + a.tx))
+
+  // BSD netstat -ibn: the <Link#n> rows, whose empty Address column shifts
+  // every later field left by one against the header.
+  const seen = new Map<string, { name: string; rx: number; tx: number }>()
+  for (const line of output.split('\n')) {
+    const f = line.trim().split(/\s+/)
+    if (!f[0] || !f[2]?.startsWith('<Link')) continue
+    const rx = Number(f[5])
+    const tx = Number(f[8])
+    if (!Number.isFinite(rx) || !Number.isFinite(tx)) continue
+    seen.set(f[0], { name: f[0], rx, tx })
+  }
+  return [...seen.values()].sort((a, b) => b.rx + b.tx - (a.rx + a.tx))
 }
 
 /** Linux: /proc/stat aggregate line. */
@@ -127,6 +203,8 @@ export class RemoteStatsPoller {
   private timer: NodeJS.Timeout | null = null
   private lastCpu: Sample | null = null
   private lastNet: NetSample | null = null
+  /** Per-core needs its own previous sample, exactly like the aggregate. */
+  private lastCores: Sample[] = []
   private stopped = false
 
   constructor(
@@ -220,7 +298,65 @@ export class RemoteStatsPoller {
       },
       network,
       load: parseLoad(output),
-      uptime: Number(section(output, 'UP')) || 0
+      uptime: Number(section(output, 'UP')) || 0,
+      detail: this.parseDetail(output)
     }
+  }
+
+  /**
+   * The hover detail. Each piece is independent: a host that answers three of
+   * the five still gets those three, and the popover shows what arrived.
+   */
+  private parseDetail(output: string): RemoteStats['detail'] {
+    const detail: NonNullable<RemoteStats['detail']> = {}
+
+    const cores = parseCoreSamples(section(output, 'CORES'))
+    if (cores.length) {
+      if (this.lastCores.length === cores.length) {
+        detail.cores = cores.map((core, i) => {
+          const previous = this.lastCores[i]
+          const idleDelta = core.idle - previous.idle
+          const totalDelta = core.total - previous.total
+          return totalDelta > 0 ? Math.min(1, Math.max(0, 1 - idleDelta / totalDelta)) : 0
+        })
+      }
+      this.lastCores = cores
+    }
+
+    const mem = parseProcesses(section(output, 'PSMEM'))
+    // ps reports resident size in kilobytes on both layouts.
+    if (mem.length) {
+      detail.topMemory = mem.map((x) => ({ name: x.name, pid: x.pid, bytes: x.first * 1024 }))
+    }
+
+    const cpu = parseProcesses(section(output, 'PSCPU'))
+    if (cpu.length) {
+      detail.topCpu = cpu.map((x) => ({ name: x.name, pid: x.pid, percent: x.first }))
+    }
+
+    // Linux /proc/diskstats: sectors read and written, 512 bytes each, on the
+    // whole-disk rows only — counting partitions too would double every byte.
+    const diskstats = section(output, 'DISKIO')
+    if (diskstats) {
+      let read = 0
+      let written = 0
+      for (const line of diskstats.split('\n')) {
+        const f = line.trim().split(/\s+/)
+        if (f.length < 10) continue
+        const name = f[2] ?? ''
+        if (!/^(sd[a-z]+|nvme\d+n\d+|vd[a-z]+|xvd[a-z]+|hd[a-z]+)$/.test(name)) continue
+        read += Number(f[5]) * 512
+        written += Number(f[9]) * 512
+      }
+      if (read || written) detail.diskIo = { read, written }
+    }
+
+    const volumes = parseVolumes(section(output, 'DFALL'))
+    if (volumes.length) detail.volumes = volumes
+
+    const interfaces = parseInterfaces(section(output, 'NET'))
+    if (interfaces.length) detail.interfaces = interfaces
+
+    return detail
   }
 }

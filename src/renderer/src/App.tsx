@@ -27,6 +27,7 @@ import {
   SPLIT_PANES,
   exportView,
   importView,
+  multiExecSelection,
   useView,
   viewActions
 } from './view-state'
@@ -93,6 +94,7 @@ export function App() {
   const recorder = useRecorder()
   const view = useView()
   const [viewMenu, setViewMenu] = useState<{ x: number; y: number } | null>(null)
+  const [execMenu, setExecMenu] = useState<{ x: number; y: number } | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [queue, setQueue] = useState<PromptRequest[]>([])
   const { ask, dialog: promptDialog } = usePrompt()
@@ -572,6 +574,15 @@ export function App() {
     return ordered.slice(0, paneCount)
   })()
 
+  // MultiExec's 'all' scope and its target picker both need the full list.
+  useEffect(() => {
+    viewActions.setOpenTabs(tabs.map((t) => t.tabId))
+  }, [tabs.map((t) => t.tabId).join('|')])
+
+  // What MultiExec would actually type into right now, for the banner and the
+  // picker's ticks. Recomputed per render so it tracks the store.
+  const execTargets = multiExecSelection()
+
   // MultiExec broadcasts to exactly what is on screen.
   useEffect(() => {
     viewActions.setVisibleTabs(paneTabs)
@@ -618,6 +629,7 @@ export function App() {
             onToolbox={() => setToolbox('processes')}
             onView={(x, y) => setViewMenu({ x, y })}
             onToggleMultiExec={viewActions.toggleMultiExec}
+            onMultiExecTargets={(x, y) => setExecMenu({ x, y })}
             multiExec={view.multiExec}
             splitActive={view.layout !== 'single'}
             recording={recorder.recording}
@@ -684,10 +696,15 @@ export function App() {
               )
             })}
 
-            {view.multiExec && paneTabs.length > 0 && (
+            {view.multiExec && (
               <div className="multiexec-banner">
-                MultiExec — typing goes to {paneTabs.length} terminal
-                {paneTabs.length === 1 ? '' : 's'}
+                MultiExec — typing goes to {execTargets.length} terminal
+                {execTargets.length === 1 ? '' : 's'}
+                {view.multiExecScope === 'all'
+                  ? ' (all tabs)'
+                  : Array.isArray(view.multiExecScope)
+                    ? ' (picked)'
+                    : ' on screen'}
               </div>
             )}
 
@@ -715,6 +732,37 @@ export function App() {
 
       {showTunnels && (
         <TunnelManager sessions={sessions} onClose={() => setShowTunnels(false)} />
+      )}
+
+      {execMenu && (
+        <ContextMenu
+          x={execMenu.x}
+          y={execMenu.y}
+          onClose={() => setExecMenu(null)}
+          items={[
+            { heading: 'MultiExec types into' },
+            {
+              label: 'Visible panes',
+              checked: view.multiExecScope === 'visible',
+              onClick: () => viewActions.setMultiExecScope('visible')
+            },
+            {
+              label: 'All open tabs',
+              checked: view.multiExecScope === 'all',
+              hint: `${tabs.length}`,
+              onClick: () => viewActions.setMultiExecScope('all')
+            },
+            {},
+            { heading: 'Or pick them' },
+            ...tabs.map((tab) => ({
+              label: tab.title,
+              checked: multiExecSelection().includes(tab.tabId),
+              hint: tab.status === 'closed' ? 'closed' : undefined,
+              onClick: () => viewActions.toggleMultiExecTarget(tab.tabId)
+            })),
+            ...(tabs.length === 0 ? [{ label: 'No tabs open', disabled: true }] : [])
+          ]}
+        />
       )}
 
       {viewMenu && (

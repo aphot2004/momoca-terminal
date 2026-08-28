@@ -1,7 +1,7 @@
 import { exec } from 'node:child_process'
 import { cpus, loadavg, totalmem, uptime } from 'node:os'
 import { promisify } from 'node:util'
-import type { SystemStats } from '@shared/types'
+import type { StatsDetail, SystemStats } from '@shared/types'
 
 const run = promisify(exec)
 
@@ -21,6 +21,16 @@ function sampleCpu(): CpuSample {
 }
 
 let lastCpu = sampleCpu()
+let lastCores = perCoreSample()
+
+/** Busy/total per core, so the hover can show them individually. */
+function perCoreSample(): { idle: number; total: number }[] {
+  return cpus().map((cpu) => {
+    let total = 0
+    for (const value of Object.values(cpu.times)) total += value
+    return { idle: cpu.times.idle, total }
+  })
+}
 let lastNet: { rx: number; tx: number; at: number } | null = null
 
 /**
@@ -106,13 +116,138 @@ async function readNetwork(): Promise<{ rx: number; tx: number }> {
   }
 }
 
+/**
+ * The per-meter detail, gathered on the same tick as the summary.
+ *
+ * Every probe is allowed to fail on its own: a machine without `iostat`, or a
+ * `ps` that returns something unexpected, must not cost the whole bar. Each
+ * returns undefined and the popover simply shows less.
+ */
+async function collectDetail(): Promise<StatsDetail> {
+  const detail: StatsDetail = {}
+
+  // Per-core, from the same counters Node already exposes.
+  const cores = perCoreSample()
+  detail.cores = cores.map((core, i) => {
+    const previous = lastCores[i]
+    if (!previous) return 0
+    const idleDelta = core.idle - previous.idle
+    const totalDelta = core.total - previous.total
+    return totalDelta > 0 ? Math.min(1, Math.max(0, 1 - idleDelta / totalDelta)) : 0
+  })
+  lastCores = cores
+
+  // Top processes, one ps for each ordering. rss is in kilobytes.
+  await Promise.all([
+    run('/bin/ps -axo rss=,pid=,comm= -r | sort -rn -k1 | head -8')
+      .then(({ stdout }) => {
+        detail.topMemory = stdout
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => {
+            const [, rss, pid, name] = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line) ?? []
+            return { name: shortName(name ?? ''), pid: Number(pid), bytes: Number(rss) * 1024 }
+          })
+          .filter((x) => x.pid)
+      })
+      .catch(() => undefined),
+
+    run('/bin/ps -axo pcpu=,pid=,comm= -r | head -8')
+      .then(({ stdout }) => {
+        detail.topCpu = stdout
+          .trim()
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => {
+            const [, pcpu, pid, name] = /^\s*([\d.]+)\s+(\d+)\s+(.*)$/.exec(line) ?? []
+            return { name: shortName(name ?? ''), pid: Number(pid), percent: Number(pcpu) }
+          })
+          .filter((x) => x.pid)
+      })
+      .catch(() => undefined),
+
+    // Real filesystems only: df lists a long tail of synthetic mounts.
+    run('/bin/df -k')
+      .then(({ stdout }) => {
+        detail.volumes = stdout
+          .trim()
+          .split('\n')
+          .slice(1)
+          .map((line) => line.trim().split(/\s+/))
+          .filter((f) => f[0]?.startsWith('/dev/'))
+          .map((f) => ({
+            device: f[0],
+            mount: f.slice(8).join(' ') || f[f.length - 1],
+            used: Number(f[2]) * 1024,
+            total: Number(f[1]) * 1024
+          }))
+          .filter((v) => v.total > 0)
+      })
+      .catch(() => undefined),
+
+    // iostat reports throughput but never splits read from write; the IO
+    // registry's per-driver Statistics block does, and is what Activity
+    // Monitor reads. Summed across every block device.
+    run('/usr/sbin/ioreg -c IOBlockStorageDriver -r -d 1 -w0')
+      .then(({ stdout }) => {
+        let read = 0
+        let written = 0
+        for (const [, n] of stdout.matchAll(/"Bytes \(Read\)"=(\d+)/g)) read += Number(n)
+        for (const [, n] of stdout.matchAll(/"Bytes \(Write\)"=(\d+)/g)) written += Number(n)
+        if (read || written) detail.diskIo = { read, written }
+      })
+      .catch(() => undefined),
+
+    run('/usr/sbin/netstat -ibn')
+      .then(({ stdout }) => {
+        const seen = new Map<string, { name: string; rx: number; tx: number; address?: string }>()
+        for (const line of stdout.trim().split('\n').slice(1)) {
+          const f = line.trim().split(/\s+/)
+          const name = f[0]
+          // The <Link#n> rows carry the byte counters. They also leave the
+          // Address column empty, so every field after Network shifts left by
+          // one against the header — hence 2, 5 and 8 rather than 3, 6 and 9.
+          if (!name || !f[2]?.startsWith('<Link')) continue
+          const rx = Number(f[5])
+          const tx = Number(f[8])
+          if (!Number.isFinite(rx) || !Number.isFinite(tx)) continue
+          if (rx === 0 && tx === 0) continue
+          seen.set(name, { name, rx, tx })
+        }
+        // Attach the first IPv4 address for each, purely to make it recognisable.
+        for (const line of stdout.trim().split('\n').slice(1)) {
+          const f = line.trim().split(/\s+/)
+          const entry = f[0] ? seen.get(f[0]) : undefined
+          if (entry && !entry.address && /^\d+\.\d+\.\d+\.\d+$/.test(f[3] ?? '')) {
+            entry.address = f[3]
+          }
+        }
+        detail.interfaces = [...seen.values()].sort((a, b) => b.rx + b.tx - (a.rx + a.tx))
+      })
+      .catch(() => undefined)
+  ])
+
+  return detail
+}
+
+/** `ps` gives a full path for many processes; the basename is what reads. */
+function shortName(command: string): string {
+  return command.split('/').pop() || command
+}
+
 export async function collectStats(): Promise<SystemStats> {
   const current = sampleCpu()
   const idleDelta = current.idle - lastCpu.idle
   const totalDelta = current.total - lastCpu.total
   lastCpu = current
 
-  const [memory, disk, network] = await Promise.all([readMemory(), readDisk(), readNetwork()])
+  const [memory, disk, network, detail] = await Promise.all([
+    readMemory(),
+    readDisk(),
+    readNetwork(),
+    collectDetail()
+  ])
   const cores = cpus()
 
   return {
@@ -125,6 +260,7 @@ export async function collectStats(): Promise<SystemStats> {
     disk,
     network,
     load: loadavg() as [number, number, number],
-    uptime: uptime()
+    uptime: uptime(),
+    detail
   }
 }

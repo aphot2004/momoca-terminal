@@ -48,8 +48,16 @@ export type SidebarSide = 'left' | 'right'
 interface ViewState {
   /** Keystrokes go to every visible terminal at once (MobaXterm's MultiExec). */
   multiExec: boolean
-  /** Tabs currently on screen; MultiExec broadcasts to exactly these. */
+  /**
+   * Who MultiExec types to. 'visible' is the panes on screen — the original
+   * behaviour, and still the default. 'all' is every open tab, on screen or
+   * not. An array is an explicit hand-picked set of tab ids.
+   */
+  multiExecScope: 'visible' | 'all' | string[]
+  /** Tabs currently on screen — the panes MultiExec's 'visible' scope means. */
   visibleTabs: string[]
+  /** Every open tab, on screen or not, in tab-strip order. */
+  openTabs: string[]
   fontSize: number
   layout: SplitLayout
   compact: boolean
@@ -70,7 +78,9 @@ const STORAGE_KEY = 'mobaclone.view'
 
 const DEFAULTS: ViewState = {
   multiExec: false,
+  multiExecScope: 'visible',
   visibleTabs: [],
+  openTabs: [],
   fontSize: 13,
   layout: 'single',
   compact: false,
@@ -138,6 +148,29 @@ function emit(next: Partial<ViewState>): void {
 export const viewActions = {
   setMultiExec: (on: boolean) => emit({ multiExec: on }),
   toggleMultiExec: () => emit({ multiExec: !state.multiExec }),
+  setMultiExecScope: (scope: 'visible' | 'all' | string[]) => emit({ multiExecScope: scope }),
+  /** Tick or untick one tab, switching to an explicit set on the first tick. */
+  toggleMultiExecTarget: (tabId: string) => {
+    const current = Array.isArray(state.multiExecScope)
+      ? state.multiExecScope
+      : state.multiExecScope === 'all'
+        ? state.openTabs
+        : state.visibleTabs
+    const next = current.includes(tabId)
+      ? current.filter((id) => id !== tabId)
+      : [...current, tabId]
+    emit({ multiExecScope: next })
+  },
+  setOpenTabs: (tabs: string[]) => {
+    if (tabs.length === state.openTabs.length && tabs.every((t, i) => state.openTabs[i] === t)) {
+      return
+    }
+    // A closed tab must not linger in a hand-picked MultiExec set, or the next
+    // keystroke goes to a dead id.
+    const scope = state.multiExecScope
+    const pruned = Array.isArray(scope) ? scope.filter((id) => tabs.includes(id)) : scope
+    emit({ openTabs: tabs, multiExecScope: pruned })
+  },
   setVisibleTabs: (tabs: string[]) => {
     // Called on every render pass; skip the notify when nothing moved.
     if (tabs.length === state.visibleTabs.length && tabs.every((t, i) => state.visibleTabs[i] === t)) {
@@ -239,6 +272,23 @@ export function useView(): ViewState {
  */
 export function broadcastTargets(tabId: string): string[] {
   if (!state.multiExec) return [tabId]
-  const targets = state.visibleTabs.length ? state.visibleTabs : [tabId]
+
+  const scope = state.multiExecScope
+  const chosen = Array.isArray(scope)
+    ? scope
+    : scope === 'all'
+      ? state.openTabs
+      : state.visibleTabs
+
+  // The originating tab always echoes, even if it somehow fell out of the set —
+  // typing into a terminal that does not show what you typed is indefensible.
+  const targets = chosen.length ? chosen : [tabId]
   return targets.includes(tabId) ? targets : [...targets, tabId]
+}
+
+/** Tabs MultiExec would currently type into, for the UI to tick. */
+export function multiExecSelection(): string[] {
+  const scope = state.multiExecScope
+  if (Array.isArray(scope)) return scope
+  return scope === 'all' ? state.openTabs : state.visibleTabs
 }

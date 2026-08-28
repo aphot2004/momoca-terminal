@@ -31,6 +31,8 @@ interface Props {
   onToolbox: () => void
   onView: (x: number, y: number) => void
   onToggleMultiExec: () => void
+  /** Opens the target picker: which tabs MultiExec types into. */
+  onMultiExecTargets: (x: number, y: number) => void
   multiExec: boolean
   splitActive: boolean
   onGuide: () => void
@@ -49,6 +51,7 @@ function RibbonButton({
   icon,
   label,
   onClick,
+  onContextMenu,
   active,
   disabled,
   title
@@ -56,6 +59,7 @@ function RibbonButton({
   icon: ReactNode
   label: string
   onClick: (event: MouseEvent) => void
+  onContextMenu?: (event: MouseEvent) => void
   active?: boolean
   disabled?: boolean
   title?: string
@@ -64,6 +68,7 @@ function RibbonButton({
     <button
       className={`ribbon-btn${active ? ' active' : ''}`}
       onClick={onClick}
+      onContextMenu={onContextMenu}
       disabled={disabled}
       title={title ?? label}
     >
@@ -153,8 +158,9 @@ export function Ribbon(props: Props) {
         }
         label="MultiExec"
         onClick={props.onToggleMultiExec}
+        onContextMenu={(e) => props.onMultiExecTargets(e.clientX, e.clientY)}
         active={props.multiExec}
-        title="Type into every visible terminal at once"
+        title="Type into several terminals at once — right-click to choose which"
       />
       <RibbonButton
         icon={<IconView />}

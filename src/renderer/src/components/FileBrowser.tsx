@@ -15,7 +15,8 @@ import {
   IconNewFile,
   IconNewFolder,
   IconRefresh,
-  IconUpload
+  IconUpload,
+  IconUploadFolder
 } from './Icons'
 import { RemoteEditor } from './RemoteEditor'
 import { TransferBar } from './TransferBar'
@@ -209,6 +210,8 @@ export function FileBrowser({ tabId, cwd }: Props) {
     })
 
   const upload = () => void exclusive(() => guard(() => window.api.sftp.upload(tabId, path)))
+  const uploadFolder = () =>
+    void exclusive(() => guard(() => window.api.sftp.uploadFolder(tabId, path)))
 
   const newFolder = () =>
     void exclusive(async () => {
@@ -288,6 +291,8 @@ export function FileBrowser({ tabId, cwd }: Props) {
       // Right-click on empty space acts on the directory itself.
       return [
         { label: 'Upload files here…', onClick: upload },
+      { label: 'Upload folder here…', onClick: uploadFolder },
+        { label: 'Upload folder here…', onClick: uploadFolder },
         {},
         { label: 'New folder…', onClick: newFolder },
         { label: 'New file…', onClick: newFile },
@@ -313,6 +318,7 @@ export function FileBrowser({ tabId, cwd }: Props) {
       { label: 'Copy full path', onClick: () => copy(entry.path) },
       {},
       { label: 'Upload files here…', onClick: upload },
+      { label: 'Upload folder here…', onClick: uploadFolder },
       { label: 'New folder…', onClick: newFolder },
       { label: 'New file…', onClick: newFile },
       {},
@@ -352,6 +358,14 @@ export function FileBrowser({ tabId, cwd }: Props) {
           }
         >
           <IconDownload />
+        </button>
+        <button
+          className="icon-btn"
+          onClick={uploadFolder}
+          disabled={opBusy}
+          title="Upload a folder to this directory, recursively"
+        >
+          <IconUploadFolder />
         </button>
         <button className="icon-btn" onClick={upload} disabled={opBusy} title="Upload files to this folder">
           <IconUpload />

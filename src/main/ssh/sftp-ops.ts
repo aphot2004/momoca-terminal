@@ -1,4 +1,4 @@
-import { mkdirSync, statSync } from 'node:fs'
+import { mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, join, posix } from 'node:path'
 import type { FileEntry, SFTPWrapper, Stats } from 'ssh2'
 import type { SftpEntry } from '@shared/types'
@@ -266,6 +266,123 @@ export async function uploadFiles(
   }
 
   return { files: items.length, bytes: totalBytes, names: items.map((i) => i.name) }
+}
+
+/**
+ * Recursively copy a local directory to a remote one.
+ *
+ * The mirror of `downloadDirectory`, and it carries the same guards for the
+ * same reason: a symlink is skipped rather than followed, each directory's
+ * resolved path is recorded so a cycle cannot loop, everything examined counts
+ * toward one ceiling, and depth is capped as the backstop. A link to `/` in a
+ * folder you drag in must not turn an upload into a copy of your disk.
+ *
+ * Directories are created before the files that go in them, deepest last, so a
+ * failure part-way leaves a partial tree rather than orphaned files.
+ */
+export async function uploadDirectory(
+  sftp: SFTPWrapper,
+  localRoot: string,
+  remoteParent: string,
+  hooks: BulkHooks = {}
+): Promise<{ files: number; bytes: number; skipped: string[]; skippedCount: number }> {
+  const root = realpathSync(localRoot)
+  const remoteRoot = `${remoteParent.replace(/\/$/, '')}/${basename(root)}`
+
+  const files: { local: string; remote: string; size: number }[] = []
+  const dirs: string[] = [remoteRoot]
+  const skipped: string[] = []
+  const visited = new Set<string>([root])
+
+  let examined = 0
+  let skippedCount = 0
+
+  const note = (reason: string): void => {
+    skippedCount++
+    if (skipped.length < MAX_SKIPPED_LISTED) skipped.push(reason)
+  }
+
+  const count = (): void => {
+    if (++examined > MAX_ENTRIES) {
+      throw new Error(
+        `Refusing to continue: more than ${MAX_ENTRIES.toLocaleString()} entries under ${root}. ` +
+          'Upload a smaller subtree, or archive it first.'
+      )
+    }
+  }
+
+  const walk = (localDir: string, remoteDir: string, depth: number): void => {
+    if (depth > MAX_DEPTH) {
+      note(`${localDir} (deeper than ${MAX_DEPTH} levels)`)
+      return
+    }
+
+    for (const entry of readdirSync(localDir, { withFileTypes: true })) {
+      count()
+      const local = join(localDir, entry.name)
+      const remote = posix.join(remoteDir, entry.name)
+
+      if (entry.isSymbolicLink()) {
+        note(`${local} (symlink)`)
+        continue
+      }
+
+      if (entry.isDirectory()) {
+        let resolved: string
+        try {
+          resolved = realpathSync(local)
+        } catch {
+          note(`${local} (unreadable)`)
+          continue
+        }
+        if (visited.has(resolved)) {
+          note(`${local} (already visited — cycle)`)
+          continue
+        }
+        visited.add(resolved)
+        dirs.push(remote)
+        walk(local, remote, depth + 1)
+        continue
+      }
+
+      if (!entry.isFile()) {
+        note(`${local} (not a regular file)`)
+        continue
+      }
+
+      try {
+        files.push({ local, remote, size: statSync(local).size })
+      } catch {
+        note(`${local} (unreadable)`)
+      }
+    }
+  }
+
+  walk(root, remoteRoot, 1)
+
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
+  hooks.onTotals?.(files.length, totalBytes)
+
+  // Shallowest first: a child directory cannot be created before its parent.
+  for (const dir of dirs.sort((a, b) => a.split('/').length - b.split('/').length)) {
+    try {
+      await mkdir(sftp, dir)
+    } catch {
+      // Already there is the common case, and is not an error worth stopping for.
+    }
+  }
+
+  let completed = 0
+  for (const file of files) {
+    hooks.onCurrent?.(basename(file.local))
+    await upload(sftp, file.local, file.remote, (transferred) =>
+      hooks.onBytes?.(completed + transferred)
+    )
+    completed += file.size
+    hooks.onItemDone?.(completed)
+  }
+
+  return { files: files.length, bytes: totalBytes, skipped, skippedCount }
 }
 
 export function mkdir(sftp: SFTPWrapper, path: string): Promise<void> {

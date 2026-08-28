@@ -2426,3 +2426,99 @@ textarea:focus {
   padding: 0 14px;
   color: var(--accent);
 }
+
+/* ---------- diagnostics detail ---------- */
+
+/* The meters read at a glance; this is the layer under them, on hover. It
+   floats over the window, so it takes the menu shadow rather than sitting flat
+   like the docked bar it rises out of. */
+.metric.hoverable {
+  cursor: default;
+}
+
+.metric.hoverable:hover .metric-label {
+  color: var(--text);
+}
+
+.stats-detail {
+  position: fixed;
+  z-index: 220;
+  min-width: 260px;
+  max-width: 420px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-3);
+  background: var(--bg-chrome);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 34px var(--shadow);
+  font-size: var(--text-label);
+}
+
+.detail-title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-soft);
+  font-size: var(--text-micro);
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.detail-sub {
+  margin-left: auto;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.8;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px 0;
+}
+
+.detail-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.detail-meter {
+  flex: none;
+  width: 54px;
+  height: 4px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.detail-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+/* Tabular, because these numbers update in place under the pointer. */
+.detail-value {
+  flex: none;
+  font-family: var(--mono-font);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.detail-empty {
+  color: var(--text-dim);
+  line-height: 1.5;
+}
