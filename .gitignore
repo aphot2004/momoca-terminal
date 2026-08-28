@@ -13,3 +13,10 @@ test/.artifacts/
 
 # TypeScript incremental build state
 *.tsbuildinfo
+
+# Working notes and design records: useful locally, not part of the published
+# project. Kept on disk, never committed.
+CLAUDE.md
+DESIGN.md
+PRODUCT.md
+.impeccable/
