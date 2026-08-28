@@ -2,9 +2,14 @@
 
 # MoMoca
 
-A MobaXterm-style terminal workspace for macOS: tabbed local and SSH sessions
-with an SFTP file browser that rides the same SSH connection as the shell beside
-it, port forwarding, macros, network tools and an admin toolbox in one window.
+A terminal workspace for macOS: tabbed local and SSH sessions with an SFTP file
+browser that rides the same SSH connection as the shell beside it, port
+forwarding, macros, network tools and an admin toolbox in one window.
+
+If you have used MobaXterm on Windows, the shape will feel familiar — that class
+of tool is what this is aiming at, and macOS has no real equivalent. MoMoca is an
+independent program written from scratch, not a port, a clone, or a reverse
+engineering of it, and it is not affiliated with or endorsed by Mobatek.
 
 Electron + TypeScript + React, `xterm.js` for rendering, `ssh2` for the protocol,
 `node-pty` for local shells. macOS only.
@@ -18,7 +23,7 @@ Electron + TypeScript + React, `xterm.js` for rendering, `ssh2` for the protocol
 </tr>
 <tr>
 <td><b>MultiExec.</b> Type once, and the keystrokes reach every terminal on screen.</td>
-<td><b>MobaXterm's menus.</b> Terminal, Sessions, View, X server, Tools, Macros, Settings, Help.</td>
+<td><b>A full menu bar.</b> Terminal, Sessions, View, X server, Tools, Macros, Settings, Help.</td>
 </tr>
 <tr>
 <td><img src="docs/screenshot-tools.png" alt="The Tools workspace showing the SSH key generator"></td>
@@ -74,12 +79,12 @@ simply unsigned, and users need the right-click-Open dance above.
 
 ## What works today
 
-- **MobaXterm-style chrome** — a menu bar (Terminal, Sessions, View, X server,
+- **Desktop chrome** — a menu bar (Terminal, Sessions, View, X server,
   Tools, Macros, Settings, Help) over the icon ribbon, left panel that switches
   between the session tree and the SFTP browser, quick-connect box, status bar,
   and a welcome screen with a Light/Dark picker. Both themes apply to the app
   chrome and to live terminals.
-- **The menus MobaXterm has** — Terminal (new/duplicate/close tab, set tab
+- **The menus** — Terminal (new/duplicate/close tab, set tab
   title, find in terminal, save or print the transcript, write commands on all
   terminals), Sessions with a **User sessions** submenu of everything saved,
   the full **View** menu (terminal splitting, compact and fullscreen, iconify,
@@ -90,7 +95,7 @@ simply unsigned, and users need the right-click-Open dance above.
   configuration) and Help. Every bar that can hide itself has a way back:
   `⌘⇧M` for the menu bar, a chevron in the tab strip for the ribbon, `⌘⇧E` for
   compact mode.
-- **Session types** — every tile in MobaXterm's strip is live. SSH, SFTP, Telnet,
+- **Session types** — twelve of them, and every one is live. SSH, SFTP, Telnet,
   Serial, Shell, FTP, Rsh and Mosh open in a tab; RDP, VNC, Browser and XDMCP
   hand off to the right external app. A type whose client isn't installed is
   **disabled in the picker** with a dot and a reason on hover, so you can't
@@ -120,7 +125,7 @@ simply unsigned, and users need the right-click-Open dance above.
   server**, and a diagram plus a sentence names the address you connect to and
   the one the service lives at. The equivalent `ssh -L/-R/-D` command is shown
   and copyable, so the mapping is checkable against something familiar.
-- **SFTP browser** — MobaXterm's toolbar (parent, download, upload, refresh, new
+- **SFTP browser** — a toolbar (parent, download, upload, refresh, new
   file, new folder, delete), an editable path bar, and a right-click menu with
   open-in-editor, download, rename, delete, copy name/path, upload, new
   file/folder, and permissions.
@@ -152,8 +157,8 @@ simply unsigned, and users need the right-click-Open dance above.
   throws "prompt() is not supported". New file, New folder and Rename use
   `usePrompt` instead.
 - **Credential vault** — secrets are sealed with the macOS Keychain by default,
-  or behind a **master password** you set, MobaXterm-style: asked for once per
-  launch, then held in memory. scrypt-derived key, AES-256-GCM per entry, and
+  or behind a **master password** you set: asked for once per launch, then held
+  in memory. scrypt-derived key, AES-256-GCM per entry, and
   switching modes re-encrypts rather than orphaning anything. There is
   deliberately no IPC that reads a secret back out to the renderer.
 - **Folder download** — recursive, with live progress. Symlinks are skipped
@@ -184,13 +189,12 @@ simply unsigned, and users need the right-click-Open dance above.
   macro and overridable for a single run. Instant still leaves a token gap
   between steps, because a remote shell's line discipline will otherwise
   coalesce separate commands into one line.
-- **Run on many terminals at once** — MobaXterm's MultiExec applied to a saved
-  macro. Tick any of the open terminals (or Select all), and the macro is
+- **Run on many terminals at once** — MultiExec applied to a saved macro. Tick any of the open terminals (or Select all), and the macro is
   replayed into them concurrently, with per-target status. One failing target
   does not abort the others. Verified by three shells writing files named after
   their own PIDs.
-- **Tools** — MobaXterm's Tools menu, minus the games and the Windows/X11-only
-  entries, translated to macOS. *System*: running processes (with SIGTERM /
+- **Tools** — an admin workspace, with the Windows- and X11-only ideas dropped
+  and the rest built for macOS. *System*: running processes (with SIGTERM /
   SIGKILL, refusing PID 0/1 and this app), hardware inventory, Homebrew packages
   with an upgrade hand-off, and a root shell. *Office*: a local text editor, a
   unified-diff file comparison, and an ASCII table. *Network*: an SSH key
@@ -202,15 +206,15 @@ simply unsigned, and users need the right-click-Open dance above.
   on screen, with a banner naming how many. Off by default and never persisted:
   restoring broadcast-to-all on launch would be a nasty surprise.
 - **Split views** — multitab, 2 terminals side by side or stacked, or a 4-way
-  grid, matching MobaXterm's Split button. Panes are *positioned* over the
+  grid. Panes are *positioned* over the
   terminal area rather than being separate React subtrees: re-parenting a
   terminal would unmount it and drop the session.
 - **View menu** — split layout, sessions panel, diagnostics bar, compact mode,
   full screen, and zoom (`⌘+` / `⌘−` / `⌘0`). Compact mode hides the ribbon —
   which is where the View menu lives — so it leaves a chevron in the tab bar and
   a `⌘⇧E` shortcut as ways back. A mode with no exit is a trap.
-- **Unix command set** — MobaXterm bundles a Unix toolset because Windows has
-  none; macOS already ships one, so there is nothing to bundle. The real gaps
+- **Unix command set** — Windows terminals bundle a Unix toolset because the
+  platform has none; macOS already ships one, so there is nothing to bundle. The real gaps
   here are different, and this reports them: which of ~37 common tools you have,
   where the **BSD** variant differs from what Linux docs assume (`sed -i`,
   `grep -P`, macOS's 2006-era rsync), and one `brew install` line for everything

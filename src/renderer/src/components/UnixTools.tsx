@@ -58,7 +58,7 @@ export function UnixTools({ onClose, onRun }: Props) {
         <h2>Unix command set</h2>
 
         <p className="hint">
-          MobaXterm bundles a Unix toolset because Windows has none. macOS already ships one, so
+          Windows terminals bundle a Unix toolset because the platform has none. macOS already ships one, so
           there is nothing to bundle here — the real gaps on a Mac are that the built-in tools are
           the <strong>BSD</strong> variants, whose flags differ from the GNU ones most Linux
           documentation assumes, and that a handful of everyday utilities simply aren&rsquo;t
