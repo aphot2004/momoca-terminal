@@ -206,6 +206,10 @@ export class RemoteStatsPoller {
   /** Per-core needs its own previous sample, exactly like the aggregate. */
   private lastCores: Sample[] = []
   private stopped = false
+  /** Paused while the diagnostics bar is hidden or the window is off screen. */
+  private paused = false
+  /** A probe is open on the server; a second one would skew both samples. */
+  private probing = false
 
   constructor(
     private readonly client: Client,
@@ -219,6 +223,27 @@ export class RemoteStatsPoller {
     this.tick()
   }
 
+  /**
+   * Stop and restart sampling without dropping the connection. The probe runs
+   * on the *server*, so a bar nobody can see is spending someone else's CPU;
+   * the counters are cleared on resume so the first sample after a gap reports
+   * 0 rather than an average over however long the window was hidden.
+   */
+  setPaused(paused: boolean): void {
+    if (this.stopped || paused === this.paused) return
+    this.paused = paused
+
+    if (paused) {
+      if (this.timer) clearTimeout(this.timer)
+      this.timer = null
+      return
+    }
+    this.lastCpu = null
+    this.lastNet = null
+    this.lastCores = []
+    this.tick()
+  }
+
   stop(): void {
     this.stopped = true
     if (this.timer) clearTimeout(this.timer)
@@ -226,20 +251,25 @@ export class RemoteStatsPoller {
   }
 
   private schedule(): void {
-    if (this.stopped || this.sender.isDestroyed()) return
+    if (this.stopped || this.paused || this.sender.isDestroyed()) return
     this.timer = setTimeout(() => this.tick(), this.intervalMs)
   }
 
   private tick(): void {
-    if (this.stopped || this.sender.isDestroyed()) return
+    if (this.stopped || this.paused || this.probing || this.sender.isDestroyed()) return
 
+    this.probing = true
     this.client.exec(PROBE, (err, stream) => {
-      if (err) return this.schedule()
+      if (err) {
+        this.probing = false
+        return this.schedule()
+      }
 
       let output = ''
       stream.on('data', (chunk: Buffer) => (output += chunk.toString('utf8')))
       stream.stderr.on('data', () => {})
       stream.on('close', () => {
+        this.probing = false
         try {
           const stats = this.parse(output)
           if (stats && !this.sender.isDestroyed()) {
@@ -308,7 +338,9 @@ export class RemoteStatsPoller {
    * the five still gets those three, and the popover shows what arrived.
    */
   private parseDetail(output: string): RemoteStats['detail'] {
-    const detail: NonNullable<RemoteStats['detail']> = {}
+    // The server's probe runs whole every tick, so anything missing below is
+    // genuinely something this host could not answer.
+    const detail: NonNullable<RemoteStats['detail']> = { sampled: true }
 
     const cores = parseCoreSamples(section(output, 'CORES'))
     if (cores.length) {

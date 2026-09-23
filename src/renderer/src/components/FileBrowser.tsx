@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SftpEntry, TransferProgress } from '@shared/types'
 import { useExclusive } from '../hooks/useExclusive'
 import { ContextMenu, type MenuItem } from './ContextMenu'
+import { DownloadDialog } from './DownloadDialog'
 import { FileProperties, modeToRwx } from './FileProperties'
 import { usePrompt } from './InputDialog'
 import {
@@ -48,7 +49,14 @@ export function FileBrowser({ tabId, cwd }: Props) {
   const [path, setPath] = useState(cwd || '.')
   const [pathDraft, setPathDraft] = useState(path)
   const [entries, setEntries] = useState<SftpEntry[]>([])
-  const [selected, setSelected] = useState<SftpEntry | null>(null)
+  /**
+   * Selected paths rather than entries: a poll that re-lists the directory
+   * hands back new objects for the same files, and a selection held by
+   * identity would evaporate every time the folder changed underneath it.
+   */
+  const [selection, setSelection] = useState<Set<string>>(() => new Set())
+  /** Where a Shift-click range starts. */
+  const anchor = useRef<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [follow, setFollow] = useState(true)
@@ -68,6 +76,8 @@ export function FileBrowser({ tabId, cwd }: Props) {
   const { ask, dialog: promptDialog } = usePrompt()
   const [editing, setEditing] = useState<string | null>(null)
   const [properties, setProperties] = useState<SftpEntry | null>(null)
+  /** What the download dialog is about to fetch, or null when it is closed. */
+  const [downloading, setDownloading] = useState<SftpEntry[] | null>(null)
 
   // Read inside the cwd effect without making it a dependency.
   const followRef = useRef(follow)
@@ -79,7 +89,8 @@ export function FileBrowser({ tabId, cwd }: Props) {
 
   useEffect(() => {
     setPathDraft(path)
-    setSelected(null)
+    setSelection(new Set())
+    anchor.current = null
   }, [path])
 
   /** Cheap identity for a listing, so a poll that changed nothing re-renders nothing. */
@@ -94,9 +105,14 @@ export function FileBrowser({ tabId, cwd }: Props) {
         // Replacing the array unconditionally would clear the selection and
         // fight the scroll position on every poll.
         setEntries((current) => (signature(current) === signature(next) ? current : next))
-        setSelected((current) =>
-          current && !next.some((e) => e.path === current.path) ? null : current
-        )
+        // Anything deleted elsewhere drops out of the selection rather than
+        // lingering as a path the next operation would fail on.
+        setSelection((current) => {
+          if (!current.size) return current
+          const alive = new Set(next.map((e) => e.path))
+          const pruned = new Set([...current].filter((p) => alive.has(p)))
+          return pruned.size === current.size ? current : pruned
+        })
         setError(null)
       } catch (err) {
         if (!quiet) {
@@ -188,26 +204,84 @@ export function FileBrowser({ tabId, cwd }: Props) {
 
   const parent = path.replace(/\/[^/]+\/?$/, '') || '/'
 
+  // --- selection ----------------------------------------------------------
+
+  /** The selected entries, in listing order — the order they download in. */
+  const chosen = entries.filter((entry) => selection.has(entry.path))
+
+  /**
+   * Finder's selection rules, because this is a file list and people already
+   * have the muscle memory: plain click replaces, ⌘-click toggles one, and
+   * Shift-click takes everything between the anchor and here.
+   */
+  const selectRow = (entry: SftpEntry, event: React.MouseEvent) => {
+    const index = entries.findIndex((e) => e.path === entry.path)
+
+    if (event.shiftKey && anchor.current) {
+      const from = entries.findIndex((e) => e.path === anchor.current)
+      if (from !== -1 && index !== -1) {
+        const [a, b] = from < index ? [from, index] : [index, from]
+        setSelection(new Set(entries.slice(a, b + 1).map((e) => e.path)))
+        return
+      }
+    }
+
+    if (event.metaKey || event.ctrlKey) {
+      setSelection((current) => {
+        const next = new Set(current)
+        if (next.has(entry.path)) next.delete(entry.path)
+        else next.add(entry.path)
+        return next
+      })
+      anchor.current = entry.path
+      return
+    }
+
+    setSelection(new Set([entry.path]))
+    anchor.current = entry.path
+  }
+
+  /** What a menu or a toolbar button acts on: the selection, or the row under it. */
+  const targetsFor = (entry: SftpEntry | null): SftpEntry[] => {
+    if (!entry) return chosen
+    return selection.has(entry.path) && chosen.length > 1 ? chosen : [entry]
+  }
+
   // --- operations ---------------------------------------------------------
 
-  const download = (entry: SftpEntry) =>
-    void exclusive(async () => {
-      try {
-        if (entry.type === 'directory') await window.api.sftp.downloadFolder(tabId, entry)
-        else await window.api.sftp.download(tabId, entry)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err))
-      }
-    })
+  /**
+   * Downloads take one of two shapes. A single plain file is saved under a name
+   * you choose, as it always has been. Anything that walks a tree — a folder,
+   * or several things at once — goes through the dialog first, which is where
+   * exclusions are set and where you can still see what you are about to pull.
+   */
+  const download = (targets: SftpEntry[]) => {
+    if (!targets.length || downloading) return
 
-  const downloadFolder = (entry: SftpEntry) =>
+    if (targets.length === 1 && targets[0].type !== 'directory') {
+      void exclusive(async () => {
+        try {
+          await window.api.sftp.download(tabId, targets[0])
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
+      })
+      return
+    }
+
+    setDownloading(targets)
+  }
+
+  const runDownload = (targets: SftpEntry[], excludes: string[]) => {
+    setDownloading(null)
     void exclusive(async () => {
       try {
-        await window.api.sftp.downloadFolder(tabId, entry)
+        await window.api.sftp.downloadItems(tabId, targets, excludes)
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
       }
     })
+  }
 
   const upload = () => void exclusive(() => guard(() => window.api.sftp.upload(tabId, path)))
   const uploadFolder = () =>
@@ -246,34 +320,51 @@ export function FileBrowser({ tabId, cwd }: Props) {
       }
     })
 
-  const remove = (entry: SftpEntry) =>
+  const remove = (targets: SftpEntry[]) =>
     void exclusive(async () => {
-      if (entry.type !== 'directory') {
-        if (window.confirm(`Delete file "${entry.name}"?`)) {
-          await guard(() => window.api.sftp.remove(tabId, entry))
+      if (!targets.length) return
+
+      const folders = targets.filter((t) => t.type === 'directory')
+      if (!folders.length) {
+        const what =
+          targets.length === 1 ? `file "${targets[0].name}"` : `${targets.length} files`
+        if (window.confirm(`Delete ${what}?`)) {
+          await guard(() => window.api.sftp.remove(tabId, targets))
         }
         return
       }
 
-      // Deleting a folder is recursive, so say how much is about to go. The
-      // count is a round trip, which is exactly the window a second click used
-      // to slip through — hence the exclusive wrapper around the whole thing.
-      let count: number | null = null
+      // A recursive delete says how much is about to go. The count is a round
+      // trip, which is exactly the window a second click used to slip through —
+      // hence the exclusive wrapper around the whole thing.
+      let total: number | null = null
       try {
-        count = await window.api.sftp.count(tabId, entry)
+        total = await window.api.sftp.count(tabId, targets)
       } catch {
-        count = null
+        total = null
       }
 
-      const detail =
-        count === null
-          ? 'and everything inside it'
-          : count === 0
-            ? '(empty)'
-            : `and the ${count} item${count === 1 ? '' : 's'} inside it`
+      let question: string
+      if (targets.length === 1) {
+        // The count includes the folder itself; the sentence is about what is inside it.
+        const inside = total === null ? null : Math.max(0, total - 1)
+        const detail =
+          inside === null
+            ? 'and everything inside it'
+            : inside === 0
+              ? '(empty)'
+              : `and the ${inside} item${inside === 1 ? '' : 's'} inside it`
+        question = `Delete folder "${targets[0].name}" ${detail}?`
+      } else {
+        const scale =
+          total === null
+            ? ', and everything inside the folders'
+            : `\n\nThat is ${total.toLocaleString()} entries in total, counting everything inside the folders.`
+        question = `Delete ${targets.length} items${scale}`
+      }
 
-      if (window.confirm(`Delete folder "${entry.name}" ${detail}?\n\nThis cannot be undone.`)) {
-        await guard(() => window.api.sftp.remove(tabId, entry))
+      if (window.confirm(`${question}\n\nThis cannot be undone.`)) {
+        await guard(() => window.api.sftp.remove(tabId, targets))
       }
     })
 
@@ -291,7 +382,6 @@ export function FileBrowser({ tabId, cwd }: Props) {
       // Right-click on empty space acts on the directory itself.
       return [
         { label: 'Upload files here…', onClick: upload },
-      { label: 'Upload folder here…', onClick: uploadFolder },
         { label: 'Upload folder here…', onClick: uploadFolder },
         {},
         { label: 'New folder…', onClick: newFolder },
@@ -302,27 +392,53 @@ export function FileBrowser({ tabId, cwd }: Props) {
       ]
     }
 
+    // Right-clicking inside a multi-selection acts on all of it; right-clicking
+    // outside one is a new selection of the row under the pointer.
+    const targets = targetsFor(entry)
+    const many = targets.length > 1
     const isDir = entry.type === 'directory'
+
     return [
-      isDir
-        ? { label: 'Open folder', onClick: () => setPath(entry.path) }
-        : { label: 'Open with embedded editor', onClick: () => setEditing(entry.path) },
-      isDir
-        ? { label: 'Download folder…', onClick: () => downloadFolder(entry) }
-        : { label: 'Download…', onClick: () => download(entry) },
+      many
+        ? { label: `Download ${targets.length} items…`, onClick: () => download(targets) }
+        : isDir
+          ? { label: 'Open folder', onClick: () => setPath(entry.path) }
+          : { label: 'Open with embedded editor', onClick: () => setEditing(entry.path) },
+      ...(many
+        ? []
+        : [
+            isDir
+              ? { label: 'Download folder…', onClick: () => download(targets) }
+              : { label: 'Download…', onClick: () => download(targets) }
+          ]),
       {},
-      { label: 'Rename…', onClick: () => rename(entry) },
-      { label: 'Delete', onClick: () => remove(entry), danger: true },
+      ...(many ? [] : [{ label: 'Rename…', onClick: () => rename(entry) }]),
+      {
+        label: many ? `Delete ${targets.length} items` : 'Delete',
+        onClick: () => remove(targets),
+        danger: true
+      },
       {},
-      { label: 'Copy name', onClick: () => copy(entry.name) },
-      { label: 'Copy full path', onClick: () => copy(entry.path) },
+      ...(many
+        ? [
+            {
+              label: 'Copy full paths',
+              onClick: () => copy(targets.map((t) => t.path).join('\n'))
+            }
+          ]
+        : [
+            { label: 'Copy name', onClick: () => copy(entry.name) },
+            { label: 'Copy full path', onClick: () => copy(entry.path) }
+          ]),
       {},
       { label: 'Upload files here…', onClick: upload },
       { label: 'Upload folder here…', onClick: uploadFolder },
       { label: 'New folder…', onClick: newFolder },
       { label: 'New file…', onClick: newFile },
       {},
-      { label: 'Permissions & properties…', onClick: () => setProperties(entry) },
+      ...(many
+        ? []
+        : [{ label: 'Permissions & properties…', onClick: () => setProperties(entry) }]),
       { label: 'Refresh', onClick: () => void refresh(path) }
     ]
   }
@@ -330,7 +446,12 @@ export function FileBrowser({ tabId, cwd }: Props) {
   const openMenu = (event: React.MouseEvent, entry: SftpEntry | null) => {
     event.preventDefault()
     event.stopPropagation()
-    if (entry) setSelected(entry)
+    // Keep an existing multi-selection when the pointer is inside it; otherwise
+    // the right-click selects what it landed on, as every file list does.
+    if (entry && !selection.has(entry.path)) {
+      setSelection(new Set([entry.path]))
+      anchor.current = entry.path
+    }
     setMenu({ x: event.clientX, y: event.clientY, entry })
   }
 
@@ -349,12 +470,16 @@ export function FileBrowser({ tabId, cwd }: Props) {
         </button>
         <button
           className="icon-btn"
-          onClick={() => selected && download(selected)}
-          disabled={!selected || opBusy}
+          onClick={() => download(chosen)}
+          disabled={!chosen.length || opBusy}
           title={
-            selected?.type === 'directory'
-              ? 'Download selected folder (recursive)'
-              : 'Download selected file'
+            !chosen.length
+              ? 'Select something to download'
+              : chosen.length > 1
+                ? `Download ${chosen.length} selected items, with exclusions`
+                : chosen[0].type === 'directory'
+                  ? 'Download selected folder, recursively, with exclusions'
+                  : 'Download selected file'
           }
         >
           <IconDownload />
@@ -382,9 +507,9 @@ export function FileBrowser({ tabId, cwd }: Props) {
         </button>
         <button
           className="icon-btn"
-          onClick={() => selected && remove(selected)}
-          disabled={!selected || opBusy}
-          title="Delete selected"
+          onClick={() => remove(chosen)}
+          disabled={!chosen.length || opBusy}
+          title={chosen.length > 1 ? `Delete ${chosen.length} selected items` : 'Delete selected'}
         >
           <IconDelete />
         </button>
@@ -410,13 +535,29 @@ export function FileBrowser({ tabId, cwd }: Props) {
 
       <div className="filepane-header">
         <span>Name</span>
+        {chosen.length > 1 && (
+          <span className="col-selected">{chosen.length} selected</span>
+        )}
         <span className="col-size">Size</span>
       </div>
 
       {error ? (
         <div className="filepane-error">{error}</div>
       ) : (
-        <div className="filepane-list" onContextMenu={(e) => openMenu(e, null)}>
+        <div
+          className="filepane-list"
+          onContextMenu={(e) => openMenu(e, null)}
+          // A click on the background is how you let go of a selection.
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelection(new Set())
+          }}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+              e.preventDefault()
+              setSelection(new Set(entries.map((entry) => entry.path)))
+            }
+          }}
+        >
           <button className="file-row" onDoubleClick={() => setPath(parent)}>
             <span className="glyph">
               <IconFolderRow />
@@ -427,8 +568,8 @@ export function FileBrowser({ tabId, cwd }: Props) {
           {entries.map((entry) => (
             <button
               key={entry.path}
-              className={`file-row${selected?.path === entry.path ? ' selected' : ''}`}
-              onClick={() => setSelected(entry)}
+              className={`file-row${selection.has(entry.path) ? ' selected' : ''}`}
+              onClick={(e) => selectRow(entry, e)}
               onDoubleClick={() => activate(entry)}
               onContextMenu={(e) => openMenu(e, entry)}
               title={`${entry.path}\n${modeToRwx(entry.mode)}  ${formatSize(entry.size)}`}
@@ -451,7 +592,10 @@ export function FileBrowser({ tabId, cwd }: Props) {
         </div>
       )}
 
-      {transfer && <TransferBar progress={transfer} />}
+      {/* TransferBar itself only shows Stop while the operation is still running. */}
+      {transfer && (
+        <TransferBar progress={transfer} onCancel={() => void window.api.sftp.cancelTransfer(tabId)} />
+      )}
 
       {promptDialog}
 
@@ -479,6 +623,14 @@ export function FileBrowser({ tabId, cwd }: Props) {
           y={menu.y}
           items={menuItems(menu.entry)}
           onClose={() => setMenu(null)}
+        />
+      )}
+
+      {downloading && (
+        <DownloadDialog
+          entries={downloading}
+          onCancel={() => setDownloading(null)}
+          onConfirm={(excludes) => runDownload(downloading, excludes)}
         />
       )}
 

@@ -44,7 +44,16 @@ function Row({ name, ratio, value }: { name: string; ratio?: number; value: stri
   )
 }
 
-function Empty({ what }: { what: string }) {
+/**
+ * Missing detail, in its two flavours. The probes are only fired while a
+ * popover is open, so the first hover has a few tens of milliseconds where
+ * nothing has arrived yet — and saying the host refused to answer a question
+ * it was never asked would be a lie, however briefly it flashed.
+ */
+function Empty({ what, sampled }: { what: string; sampled?: boolean }) {
+  if (!sampled) {
+    return <div className="detail-empty waiting">Reading {what.replace(/^its /, 'the ')}…</div>
+  }
   return <div className="detail-empty">This host did not report {what}.</div>
 }
 
@@ -94,7 +103,7 @@ export function StatsDetailPopover({ metric, detail, uptime, cores, anchor }: Pr
   const body = (() => {
     switch (metric) {
       case 'cpu': {
-        if (!detail?.cores?.length) return <Empty what="per-core usage" />
+        if (!detail?.cores?.length) return <Empty what="per-core usage" sampled={detail?.sampled} />
         return (
           <>
             {detail.cores.map((busy, i) => (
@@ -104,7 +113,7 @@ export function StatsDetailPopover({ metric, detail, uptime, cores, anchor }: Pr
         )
       }
       case 'memory': {
-        if (!detail?.topMemory?.length) return <Empty what="its process list" />
+        if (!detail?.topMemory?.length) return <Empty what="its process list" sampled={detail?.sampled} />
         const largest = detail.topMemory[0]?.bytes || 1
         return (
           <>
@@ -120,7 +129,7 @@ export function StatsDetailPopover({ metric, detail, uptime, cores, anchor }: Pr
         )
       }
       case 'disk': {
-        if (!detail?.volumes?.length && !detail?.diskIo) return <Empty what="its volumes" />
+        if (!detail?.volumes?.length && !detail?.diskIo) return <Empty what="its volumes" sampled={detail?.sampled} />
         return (
           <>
             {detail.diskIo && (
@@ -144,7 +153,7 @@ export function StatsDetailPopover({ metric, detail, uptime, cores, anchor }: Pr
         )
       }
       case 'network': {
-        if (!detail?.interfaces?.length) return <Empty what="its interfaces" />
+        if (!detail?.interfaces?.length) return <Empty what="its interfaces" sampled={detail?.sampled} />
         return (
           <>
             {detail.interfaces.map((n) => (
@@ -158,7 +167,7 @@ export function StatsDetailPopover({ metric, detail, uptime, cores, anchor }: Pr
         )
       }
       case 'load': {
-        if (!detail?.topCpu?.length) return <Empty what="its process list" />
+        if (!detail?.topCpu?.length) return <Empty what="its process list" sampled={detail?.sampled} />
         return (
           <>
             {detail.topCpu.map((p) => (

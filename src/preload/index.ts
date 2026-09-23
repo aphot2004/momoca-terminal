@@ -116,22 +116,27 @@ const api = {
       }>('sftp:stat', tabId, path),
     rename: (tabId: string, from: string, to: string) =>
       invoke<void>('sftp:rename', tabId, from, to),
-    remove: (tabId: string, entry: SftpEntry) =>
-      invoke<{ removed: number }>('sftp:remove', tabId, entry),
-    count: (tabId: string, entry: SftpEntry) => invoke<number>('sftp:count', tabId, entry),
+    /** Delete a selection: files, folders, and everything under the folders. */
+    remove: (tabId: string, entries: SftpEntry[]) =>
+      invoke<{ removed: number }>('sftp:remove', tabId, entries),
+    /** How many entries deleting that selection would touch, for the confirmation. */
+    count: (tabId: string, entries: SftpEntry[]) => invoke<number>('sftp:count', tabId, entries),
+    /** One file, saved under a name you choose. */
     download: (tabId: string, entry: SftpEntry) => invoke<string | null>('sftp:download', tabId, entry),
-    downloadFolder: (tabId: string, entry: SftpEntry) =>
+    /**
+     * Any selection, into one folder you choose. `excludes` are gitignore-style
+     * patterns matched against the path each entry would take on disk.
+     */
+    downloadItems: (tabId: string, entries: SftpEntry[], excludes: string[]) =>
       invoke<{
         destination: string
         files: number
         bytes: number
         skipped: string[]
         skippedCount: number
-      } | null>(
-        'sftp:downloadFolder',
-        tabId,
-        entry
-      ),
+        excluded: string[]
+        excludedCount: number
+      } | null>('sftp:downloadItems', tabId, entries, excludes),
     upload: (tabId: string, remoteDir: string) => invoke<string[]>('sftp:upload', tabId, remoteDir),
     uploadFolder: (tabId: string, remoteDir: string) =>
       invoke<{ files: number; bytes: number; skipped: string[]; skippedCount: number } | null>(
@@ -139,7 +144,9 @@ const api = {
         tabId,
         remoteDir
       ),
-    onProgress: (handler: (p: TransferProgress) => void) => subscribe('sftp:progress', handler)
+    onProgress: (handler: (p: TransferProgress) => void) => subscribe('sftp:progress', handler),
+    /** Stops the bulk operation currently running for this tab, if any. */
+    cancelTransfer: (tabId: string) => invoke<void>('sftp:cancelTransfer', tabId)
   },
 
   tools: {
@@ -163,6 +170,13 @@ const api = {
 
   stats: {
     onUpdate: (handler: (stats: SystemStats) => void) => subscribe('stats:update', handler),
+    /**
+     * Tell the main process what the diagnostics bar is showing. Nothing is
+     * sampled until the bar asks, and the costly per-meter detail is gathered
+     * only while the hover popover is open.
+     */
+    setNeeds: (needs: { summary: boolean; detail: boolean }) =>
+      invoke<void>('stats:needs', needs),
     /** Per-tab metrics for the server behind an SSH session. */
     onRemote: (handler: (p: { tabId: string; stats: RemoteStats }) => void) =>
       subscribe('stats:remote', handler)

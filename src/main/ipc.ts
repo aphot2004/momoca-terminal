@@ -9,6 +9,7 @@ import { checkUnixTools } from './unix-tools'
 import * as toolbox from './tools'
 import * as macros from './store/macros'
 import * as sftpOps from './ssh/sftp-ops'
+import type { CancelSignal } from './ssh/sftp-ops'
 import { TransferReporter } from './ssh/transfer-progress'
 import * as tunnels from './ssh/tunnels'
 import { listSerialPorts } from './terminals/serial'
@@ -16,6 +17,7 @@ import * as keys from './store/keys'
 import * as sessions from './store/sessions'
 import * as secrets from './store/secrets'
 import * as registry from './terminals/registry'
+import { setStatsNeeds } from './stats-poll'
 
 /**
  * Every handler is wrapped so a thrown error crosses the bridge as a rejected
@@ -34,6 +36,37 @@ function handle<A extends unknown[], R>(
   })
 }
 
+/**
+ * File panels, attached to the window that asked for them.
+ *
+ * A parentless `dialog.showOpenDialog` is app-modal but *unattached* on macOS:
+ * it is a free-floating panel, and it can end up behind another application's
+ * window with nothing on screen to say the app is waiting on it. The app then
+ * looks like it swallowed the click — which is exactly how it read when the
+ * download dialog handed off to it, since our own modal closes at the same
+ * moment. Passing the window makes it a sheet on that window, which cannot be
+ * lost behind anything, and it brings the window forward besides.
+ */
+function parentOf(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {
+  return BrowserWindow.fromWebContents(event.sender)
+}
+
+function openDialog(
+  event: Electron.IpcMainInvokeEvent,
+  options: Electron.OpenDialogOptions
+): Promise<Electron.OpenDialogReturnValue> {
+  const parent = parentOf(event)
+  return parent ? dialog.showOpenDialog(parent, options) : dialog.showOpenDialog(options)
+}
+
+function saveDialog(
+  event: Electron.IpcMainInvokeEvent,
+  options: Electron.SaveDialogOptions
+): Promise<Electron.SaveDialogReturnValue> {
+  const parent = parentOf(event)
+  return parent ? dialog.showSaveDialog(parent, options) : dialog.showSaveDialog(options)
+}
+
 /** Escape a transcript for the throwaway print window. */
 function escapeHtml(value: string): string {
   return value
@@ -48,8 +81,50 @@ function hooksFor(reporter: TransferReporter) {
     onTotals: (items: number, bytes: number) => reporter.setTotals(items, bytes),
     onCurrent: (name: string) => reporter.setCurrent(name),
     onBytes: (bytes: number) => reporter.setBytes(bytes),
-    onItemDone: (bytes: number) => reporter.itemDone(bytes)
+    onItemDone: (bytes: number) => reporter.itemDone(bytes),
+    onScanning: (found: number) => reporter.scanning(found),
+    onCurrentProgress: (name: string, transferred: number, total: number) =>
+      reporter.setCurrentFileProgress(name, transferred, total)
   }
+}
+
+/**
+ * Appends what a batch left behind to its finish summary — renamed
+ * case-collisions and failed files — so neither is ever silent. Both lists are
+ * capped in the summary text itself; the full lists still ride on the IPC
+ * return value for anything that wants them.
+ */
+function withCaveats(
+  base: string,
+  outcome: { renamedCount?: number; renamed?: { original: string; renamedTo: string }[]; failedCount?: number; failed?: { name: string; error: string }[] }
+): string {
+  let text = base
+  if (outcome.renamedCount) {
+    text += ` · ${outcome.renamedCount} renamed to avoid a name clash that only differs by case`
+  }
+  if (outcome.failedCount) {
+    const names = (outcome.failed ?? []).slice(0, 3).map((f) => f.name).join(', ')
+    const more = outcome.failedCount > 3 ? `, +${outcome.failedCount - 3} more` : ''
+    text += ` · ${outcome.failedCount} failed (${names}${more})`
+  }
+  return text
+}
+
+/**
+ * One cancel flag per tab, live only while a bulk SFTP operation is running.
+ * The renderer only ever has one such operation in flight per tab — every
+ * bulk action is gated through `useExclusive` — so a tab id is all a "Stop"
+ * click needs to find the right one.
+ */
+const cancelSignals = new Map<string, CancelSignal>()
+
+/** Registers a fresh signal for this operation and tears it down when it ends. */
+function withCancelSignal<T>(tabId: string, run: (signal: CancelSignal) => Promise<T>): Promise<T> {
+  const signal: CancelSignal = { cancelled: false }
+  cancelSignals.set(tabId, signal)
+  return run(signal).finally(() => {
+    if (cancelSignals.get(tabId) === signal) cancelSignals.delete(tabId)
+  })
 }
 
 export function registerIpc(): void {
@@ -74,8 +149,8 @@ export function registerIpc(): void {
   handle('keys:rename', (_e, id: string, name: string) => keys.renameKey(id, name))
   handle('keys:delete', (_e, id: string) => keys.deleteKey(id))
 
-  handle('keys:pickFile', async () => {
-    const result = await dialog.showOpenDialog({
+  handle('keys:pickFile', async (event) => {
+    const result = await openDialog(event, {
       title: 'Import private key',
       defaultPath: join(homedir(), '.ssh'),
       buttonLabel: 'Import',
@@ -125,111 +200,161 @@ export function registerIpc(): void {
   handle('sftp:rename', async (_e, tabId: string, from: string, to: string) =>
     sftpOps.rename(await registry.requireSftp(tabId), from, to)
   )
-  handle('sftp:remove', async (event, tabId: string, entry: SftpEntry) => {
+  handle('sftp:remove', async (event, tabId: string, entries: SftpEntry[]) => {
     const sftp = await registry.requireSftp(tabId)
     const reporter = new TransferReporter(event.sender, tabId, 'delete')
-    try {
-      const result = await sftpOps.remove(sftp, entry, hooksFor(reporter))
-      reporter.finish(`Deleted ${result.removed} item${result.removed === 1 ? '' : 's'}`)
-      return result
-    } catch (err) {
-      reporter.fail(err instanceof Error ? err.message : String(err))
-      throw err
-    }
+    return withCancelSignal(tabId, async (signal) => {
+      try {
+        const result = await sftpOps.removeItems(sftp, entries, hooksFor(reporter), signal)
+        if (result.cancelled) {
+          reporter.cancel(`Stopped — deleted ${result.removed} item${result.removed === 1 ? '' : 's'}`)
+        } else {
+          reporter.finish(`Deleted ${result.removed} item${result.removed === 1 ? '' : 's'}`)
+        }
+        return result
+      } catch (err) {
+        reporter.fail(err instanceof Error ? err.message : String(err))
+        throw err
+      }
+    })
   })
-  handle('sftp:count', async (_e, tabId: string, entry: SftpEntry) =>
-    sftpOps.countEntries(await registry.requireSftp(tabId), entry)
-  )
+  handle('sftp:count', async (event, tabId: string, entries: SftpEntry[]) => {
+    const sftp = await registry.requireSftp(tabId)
+    const reporter = new TransferReporter(event.sender, tabId, 'delete')
+    return withCancelSignal(tabId, (signal) =>
+      sftpOps.countItems(sftp, entries, (found) => reporter.scanning(found), signal)
+    )
+  })
+  /** Stops the bulk operation currently running for this tab, if any. */
+  handle('sftp:cancelTransfer', (_e, tabId: string) => {
+    const signal = cancelSignals.get(tabId)
+    if (signal) signal.cancelled = true
+  })
 
   handle('sftp:download', async (event, tabId: string, entry: SftpEntry) => {
     const sftp = await registry.requireSftp(tabId)
-    const result = await dialog.showSaveDialog({ defaultPath: entry.name })
+    const result = await saveDialog(event, { defaultPath: entry.name })
     if (result.canceled || !result.filePath) return null
 
     const reporter = new TransferReporter(event.sender, tabId, 'download', 1, entry.size)
     reporter.setCurrent(entry.name)
-    try {
-      await sftpOps.download(sftp, entry.path, result.filePath, (bytes) =>
-        reporter.setBytes(bytes)
-      )
-      reporter.itemDone(entry.size)
-      reporter.finish(`Saved ${entry.name}`)
-      return result.filePath
-    } catch (err) {
-      reporter.fail(err instanceof Error ? err.message : String(err))
-      throw err
-    }
-  })
-
-  handle('sftp:downloadFolder', async (event, tabId: string, entry: SftpEntry) => {
-    const sftp = await registry.requireSftp(tabId)
-    const result = await dialog.showOpenDialog({
-      title: `Download "${entry.name}" into…`,
-      buttonLabel: 'Download here',
-      properties: ['openDirectory', 'createDirectory']
+    return withCancelSignal(tabId, async (signal) => {
+      try {
+        await sftpOps.download(sftp, entry.path, result.filePath!, (bytes) => reporter.setBytes(bytes), signal)
+        if (signal.cancelled) {
+          reporter.cancel(`Stopped downloading ${entry.name}`)
+          return null
+        }
+        reporter.itemDone(entry.size)
+        reporter.finish(`Saved ${entry.name}`)
+        return result.filePath!
+      } catch (err) {
+        if (err instanceof sftpOps.TransferCancelledError) {
+          reporter.cancel(`Stopped downloading ${entry.name}`)
+          return null
+        }
+        reporter.fail(err instanceof Error ? err.message : String(err))
+        throw err
+      }
     })
-    if (result.canceled || !result.filePaths[0]) return null
-
-    const reporter = new TransferReporter(event.sender, tabId, 'download')
-    try {
-      const outcome = await sftpOps.downloadDirectory(
-        sftp,
-        entry.path,
-        result.filePaths[0],
-        hooksFor(reporter)
-      )
-      reporter.finish(
-        `Saved ${outcome.files} file${outcome.files === 1 ? '' : 's'} to ${result.filePaths[0]}` +
-          (outcome.skippedCount ? ` · skipped ${outcome.skippedCount}` : '')
-      )
-      return { destination: result.filePaths[0], ...outcome }
-    } catch (err) {
-      reporter.fail(err instanceof Error ? err.message : String(err))
-      throw err
-    }
   })
+
+  /**
+   * Everything except a single file: one destination folder, any mix of files
+   * and directories, and the exclusion patterns the download dialog collected.
+   */
+  handle(
+    'sftp:downloadItems',
+    async (event, tabId: string, entries: SftpEntry[], excludes: string[]) => {
+      const sftp = await registry.requireSftp(tabId)
+      const what =
+        entries.length === 1 ? `"${entries[0].name}"` : `${entries.length} items`
+      const result = await openDialog(event, {
+        title: `Download ${what} into…`,
+        buttonLabel: 'Download here',
+        properties: ['openDirectory', 'createDirectory']
+      })
+      if (result.canceled || !result.filePaths[0]) return null
+
+      const reporter = new TransferReporter(event.sender, tabId, 'download')
+      return withCancelSignal(tabId, async (signal) => {
+        try {
+          const outcome = await sftpOps.downloadItems(
+            sftp,
+            entries,
+            result.filePaths[0],
+            excludes,
+            hooksFor(reporter),
+            signal
+          )
+          const base = withCaveats(
+            `Saved ${outcome.files} file${outcome.files === 1 ? '' : 's'} to ${result.filePaths[0]}` +
+              (outcome.excludedCount ? ` · excluded ${outcome.excludedCount}` : '') +
+              (outcome.skippedCount ? ` · skipped ${outcome.skippedCount}` : ''),
+            outcome
+          )
+          if (outcome.cancelled) reporter.cancel(`Stopped — ${base}`)
+          else reporter.finish(base)
+          return { destination: result.filePaths[0], ...outcome }
+        } catch (err) {
+          reporter.fail(err instanceof Error ? err.message : String(err))
+          throw err
+        }
+      })
+    }
+  )
 
   handle('sftp:uploadFolder', async (event, tabId: string, remoteDir: string) => {
     const sftp = await registry.requireSftp(tabId)
-    const result = await dialog.showOpenDialog({
+    const result = await openDialog(event, {
       title: 'Upload folder',
       properties: ['openDirectory']
     })
     if (result.canceled || !result.filePaths[0]) return null
 
     const reporter = new TransferReporter(event.sender, tabId, 'upload')
-    try {
-      const outcome = await sftpOps.uploadDirectory(
-        sftp,
-        result.filePaths[0],
-        remoteDir,
-        hooksFor(reporter)
-      )
-      reporter.finish(
-        `Uploaded ${outcome.files} file${outcome.files === 1 ? '' : 's'}` +
-          (outcome.skippedCount ? `, skipped ${outcome.skippedCount}` : '')
-      )
-      return outcome
-    } catch (err) {
-      reporter.fail(err instanceof Error ? err.message : String(err))
-      throw err
-    }
+    return withCancelSignal(tabId, async (signal) => {
+      try {
+        const outcome = await sftpOps.uploadDirectory(
+          sftp,
+          result.filePaths[0],
+          remoteDir,
+          hooksFor(reporter),
+          signal
+        )
+        const base = withCaveats(
+          `Uploaded ${outcome.files} file${outcome.files === 1 ? '' : 's'}` +
+            (outcome.skippedCount ? `, skipped ${outcome.skippedCount}` : ''),
+          outcome
+        )
+        if (outcome.cancelled) reporter.cancel(`Stopped — ${base}`)
+        else reporter.finish(base)
+        return outcome
+      } catch (err) {
+        reporter.fail(err instanceof Error ? err.message : String(err))
+        throw err
+      }
+    })
   })
 
   handle('sftp:upload', async (event, tabId: string, remoteDir: string) => {
     const sftp = await registry.requireSftp(tabId)
-    const result = await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })
+    const result = await openDialog(event, { properties: ['openFile', 'multiSelections'] })
     if (result.canceled) return []
 
     const reporter = new TransferReporter(event.sender, tabId, 'upload')
-    try {
-      const outcome = await sftpOps.uploadFiles(sftp, result.filePaths, remoteDir, hooksFor(reporter))
-      reporter.finish(`Uploaded ${outcome.files} file${outcome.files === 1 ? '' : 's'}`)
-      return outcome.names
-    } catch (err) {
-      reporter.fail(err instanceof Error ? err.message : String(err))
-      throw err
-    }
+    return withCancelSignal(tabId, async (signal) => {
+      try {
+        const outcome = await sftpOps.uploadFiles(sftp, result.filePaths, remoteDir, hooksFor(reporter), signal)
+        const base = withCaveats(`Uploaded ${outcome.files} file${outcome.files === 1 ? '' : 's'}`, outcome)
+        if (outcome.cancelled) reporter.cancel(`Stopped — ${base}`)
+        else reporter.finish(base)
+        return outcome.names
+      } catch (err) {
+        reporter.fail(err instanceof Error ? err.message : String(err))
+        throw err
+      }
+    })
   })
 
   // --- tunnels ------------------------------------------------------------
@@ -275,16 +400,16 @@ export function registerIpc(): void {
   handle('tool:diff', (_e, left: string, right: string) => toolbox.diffFiles(left, right))
   handle('tool:brew', () => toolbox.brewPackages())
 
-  handle('tool:pickFile', async (_e, title: string) => {
-    const result = await dialog.showOpenDialog({
+  handle('tool:pickFile', async (event, title: string) => {
+    const result = await openDialog(event, {
       title,
       properties: ['openFile', 'showHiddenFiles']
     })
     return result.canceled ? null : result.filePaths[0]
   })
 
-  handle('tool:saveFile', async (_e, defaultPath: string) => {
-    const result = await dialog.showSaveDialog({ defaultPath })
+  handle('tool:saveFile', async (event, defaultPath: string) => {
+    const result = await saveDialog(event, { defaultPath })
     return result.canceled ? null : result.filePath
   })
 
@@ -343,13 +468,21 @@ export function registerIpc(): void {
     }
   })
 
+  // --- diagnostics bar ------------------------------------------------------
+  // The bar tells the main process what it is showing, so the sampler can stop
+  // entirely when it is hidden and skip the expensive half when the hover
+  // popover is closed.
+  handle('stats:needs', (_e, needs: { summary: boolean; detail: boolean }) =>
+    setStatsNeeds({ summary: Boolean(needs?.summary), detail: Boolean(needs?.detail) })
+  )
+
   // --- X server -------------------------------------------------------------
   handle('tools:startXServer', () => startXServer())
 
   // --- misc ---------------------------------------------------------------
   handle('serial:list', () => listSerialPorts())
-  handle('dialog:pickPrivateKey', async () => {
-    const result = await dialog.showOpenDialog({
+  handle('dialog:pickPrivateKey', async (event) => {
+    const result = await openDialog(event, {
       title: 'Select private key',
       defaultPath: `${process.env.HOME}/.ssh`,
       properties: ['openFile', 'showHiddenFiles']

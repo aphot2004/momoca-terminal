@@ -27,8 +27,20 @@ const VERB: Record<TransferProgress['kind'], string> = {
   delete: 'Deleting'
 }
 
+const SCANNING_VERB: Record<TransferProgress['kind'], string> = {
+  download: 'Preparing download',
+  upload: 'Preparing upload',
+  delete: 'Counting'
+}
+
+interface Props {
+  progress: TransferProgress
+  /** Stops the operation this bar is reporting. Omitted once it's finished. */
+  onCancel?: () => void
+}
+
 /** Footer strip showing the file in flight, throughput and overall progress. */
-export function TransferBar({ progress }: { progress: TransferProgress }) {
+export function TransferBar({ progress, onCancel }: Props) {
   if (progress.error) {
     return (
       <div className="transfer">
@@ -40,8 +52,28 @@ export function TransferBar({ progress }: { progress: TransferProgress }) {
   if (progress.finished) {
     return (
       <div className="transfer">
-        <div className="transfer-line done" title={progress.summary}>
+        <div className={`transfer-line ${progress.cancelled ? 'stopped' : 'done'}`} title={progress.summary}>
           {progress.summary}
+        </div>
+      </div>
+    )
+  }
+
+  // Real round trips over the connection with nothing to show yet — a big
+  // selection used to look exactly like a stuck button for however long this
+  // took. A named phase and a running count says it's actually working.
+  if (progress.phase === 'scanning') {
+    return (
+      <div className="transfer">
+        <div className="transfer-line scanning">
+          <span className="transfer-verb">{SCANNING_VERB[progress.kind]}</span>
+          <span className="scan-dot" />
+          <span className="transfer-name">{(progress.found ?? 0).toLocaleString()} found…</span>
+          {onCancel && (
+            <button className="btn ghost danger transfer-stop" onClick={onCancel}>
+              Stop
+            </button>
+          )}
         </div>
       </div>
     )
@@ -64,10 +96,15 @@ export function TransferBar({ progress }: { progress: TransferProgress }) {
       <div className="transfer-line" title={progress.current}>
         <span className="transfer-verb">{VERB[progress.kind]}</span>
         <span className="transfer-name">{progress.current || '…'}</span>
+        {onCancel && (
+          <button className="btn ghost danger transfer-stop" onClick={onCancel}>
+            Stop
+          </button>
+        )}
       </div>
 
       <span className="meter">
-        <span className="meter-fill ok" style={{ width: `${Math.min(1, ratio) * 100}%` }} />
+        <span className="meter-fill ok smooth" style={{ transform: `scaleX(${Math.min(1, ratio)})` }} />
       </span>
 
       <div className="transfer-stats">
@@ -84,6 +121,31 @@ export function TransferBar({ progress }: { progress: TransferProgress }) {
         )}
         {remaining && <span>{remaining}</span>}
       </div>
+
+      {/*
+        The bar above is the whole batch; several files move at once (see
+        `mapPool`), so it alone can never show any single file's own progress
+        — only the aggregate. This follows whichever file most recently sent a
+        chunk. It has nothing to say for a delete, which moves no bytes.
+      */}
+      {movesBytes && progress.currentFile && progress.currentFileTotalBytes! > 0 && (
+        <div className="transfer-sub">
+          <span className="transfer-name sub" title={progress.currentFile}>
+            {progress.currentFile}
+          </span>
+          <span className="meter sub">
+            <span
+              className="meter-fill ok"
+              style={{
+                transform: `scaleX(${Math.min(1, progress.currentFileBytes! / progress.currentFileTotalBytes!)})`
+              }}
+            />
+          </span>
+          <span className="transfer-sub-stat">
+            {Math.round((progress.currentFileBytes! / progress.currentFileTotalBytes!) * 100)}%
+          </span>
+        </div>
+      )}
     </div>
   )
 }

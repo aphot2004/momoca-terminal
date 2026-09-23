@@ -737,6 +737,17 @@ textarea:focus {
   margin-left: auto;
 }
 
+/*
+   The selection count rides in the header rather than the footer so it can
+   appear and disappear without changing the pane's height and shifting the
+   listing under the pointer.
+*/
+.filepane-header .col-selected {
+  margin-left: auto;
+  padding-right: var(--space-3);
+  color: var(--accent);
+}
+
 .icon-btn {
   width: 24px;
   height: 22px;
@@ -852,6 +863,8 @@ textarea:focus {
   color: var(--text-dim);
   overflow-x: auto;
   white-space: nowrap;
+  /* The bar updates twice a second forever; keep its work off the document. */
+  contain: layout style paint;
   scrollbar-width: none;
 }
 
@@ -894,8 +907,27 @@ textarea:focus {
 .meter-fill {
   display: block;
   height: 100%;
-  border-radius: var(--radius-xs);
-  transition: width 400ms ease;
+  /*
+    Full width, scaled down — not a width the browser has to lay out. The track
+    above clips the corners, so no radius is needed here.
+
+    No transition by default. The diagnostics meters redraw twice a second for
+    as long as the app is open, and easing them kept a compositor animation
+    running for 400ms out of every 2000ms: measured at 2.3% of a core, burned
+    forever, to slide six 54px bars. A meter that steps is also the more honest
+    reading — it is a sample, taken twice a second, next to numbers that step.
+  */
+  width: 100%;
+  transform-origin: left center;
+}
+
+/*
+   Progress, not measurement: a transfer or a scan runs once and ends, so the
+   animation is bounded by the operation and smooths a value that arrives in
+   uneven jumps.
+*/
+.meter-fill.smooth {
+  transition: transform 400ms ease;
 }
 
 .meter-fill.ok {
@@ -980,6 +1012,39 @@ textarea:focus {
   text-overflow: ellipsis;
 }
 
+/* Stopped by the user, not a failure — neutral, not a status color. */
+.transfer-line.stopped {
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.transfer-line.scanning {
+  align-items: center;
+}
+
+.scan-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: rec-pulse 1.2s ease-in-out infinite;
+  flex: none;
+}
+
+/*
+   Small enough to sit inline in a 26px-ish strip without pushing the meter
+   around. `align-self` rather than the row's own `align-items` (baseline, for
+   the verb/name text pair) so the button doesn't inherit a text baseline.
+*/
+.transfer-stop {
+  margin-left: auto;
+  flex: none;
+  align-self: center;
+  padding: 2px 8px;
+  font-size: var(--text-micro);
+}
+
 .transfer-verb {
   flex: none;
   text-transform: uppercase;
@@ -1014,6 +1079,38 @@ textarea:focus {
 
 .transfer .meter {
   width: 100%;
+}
+
+/*
+   The single file currently moving, under the batch's own bar. Smaller and
+   dimmer throughout — it's detail, not the headline — and the meter itself
+   is thinner so the two are never mistaken for each other at a glance.
+*/
+.transfer-sub {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.transfer-name.sub {
+  font-size: var(--text-micro);
+  color: var(--text-dim);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.meter.sub {
+  height: 3px;
+}
+
+.transfer-sub-stat {
+  flex: none;
+  font-size: var(--text-micro);
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- tool guide ---------- */
@@ -1360,6 +1457,39 @@ textarea:focus {
   border-radius: var(--radius-lg);
   padding: 11px;
   margin-bottom: 11px;
+}
+
+/* What a download is about to fetch, listed before it starts. */
+.download-manifest {
+  max-height: 128px;
+  overflow-y: auto;
+  padding: 8px 11px;
+}
+
+.download-item {
+  font-size: var(--text-label);
+  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-item.muted,
+.download-item .muted {
+  color: var(--text-dim);
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.btn.preset {
+  font-family: var(--mono-font);
+  font-size: var(--text-label);
+  padding: 3px 8px;
+  border-color: var(--border-soft);
 }
 
 .checkbox {
@@ -1824,6 +1954,7 @@ textarea:focus {
 
 @media (prefers-reduced-motion: reduce) {
   .rec-dot,
+  .scan-dot,
   .ribbon-badge.rec {
     animation: none;
   }
@@ -2521,4 +2652,9 @@ textarea:focus {
 .detail-empty {
   color: var(--text-dim);
   line-height: 1.5;
+}
+
+/* Momentary, and about to be replaced — it should not read as a result. */
+.detail-empty.waiting {
+  opacity: 0.55;
 }

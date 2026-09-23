@@ -124,8 +124,22 @@ export function TerminalPane({
       const rowHeight = viewport.clientHeight / Math.max(1, term.rows)
       setBehind(Math.max(1, Math.round(remaining / rowHeight)))
     }
-    viewport?.addEventListener('scroll', updateBehind, { passive: true })
-    term.onLineFeed(updateBehind)
+
+    // Reading scrollHeight forces layout, and the two triggers below fire per
+    // *line* of output and per scroll event — thousands a second under a `tail
+    // -f` or a large `cat`. The chip can only be redrawn once a frame anyway,
+    // so coalesce to one measurement per frame and skip it entirely while the
+    // pane is off screen, where there is nothing to measure and nothing to see.
+    let queued = 0
+    const measureBehind = () => {
+      if (queued || !host.clientHeight) return
+      queued = requestAnimationFrame(() => {
+        queued = 0
+        updateBehind()
+      })
+    }
+    viewport?.addEventListener('scroll', measureBehind, { passive: true })
+    term.onLineFeed(measureBehind)
 
     // Scrollback keys. Returning false stops xterm forwarding them to the
     // shell, which would otherwise receive a stray escape sequence.
@@ -197,7 +211,8 @@ export function TerminalPane({
     return () => {
       observer.disconnect()
       unregisterTerminal(tabId)
-      viewport?.removeEventListener('scroll', updateBehind)
+      if (queued) cancelAnimationFrame(queued)
+      viewport?.removeEventListener('scroll', measureBehind)
       offData()
       offExit()
       void window.api.term.close(tabId).catch(() => {})

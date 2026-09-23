@@ -3,9 +3,7 @@ import {
   EXTERNAL_KINDS,
   type ConnectOptions,
   type Macro,
-  type RemoteStats,
   type SavedSession,
-  type SystemStats,
   type TabState,
   type ToolId
 } from '@shared/types'
@@ -32,6 +30,7 @@ import {
   viewActions
 } from './view-state'
 import { macroSpeed, playMacro, startRecording, useRecorder } from './macro-recorder'
+import { statsActions } from './stats-store'
 import { findInTerminal, findNextInTerminal, getTerminal, terminalText } from './terminal-registry'
 import { KeyManager } from './components/KeyManager'
 import { StatsBar } from './components/StatsBar'
@@ -76,9 +75,6 @@ export function App() {
   const [showKeys, setShowKeys] = useState(false)
   const [showTunnels, setShowTunnels] = useState(false)
   const [activeTunnels, setActiveTunnels] = useState(0)
-  const [stats, setStats] = useState<SystemStats | null>(null)
-  /** Server metrics keyed by tab, so switching tabs switches the bar. */
-  const [remoteStats, setRemoteStats] = useState<Record<string, RemoteStats>>({})
   const [showLocalStats, setShowLocalStats] = useState(false)
   const [guide, setGuide] = useState<{ focus?: ToolId } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -158,9 +154,11 @@ export function App() {
     const offHostKey = window.api.prompts.onHostKey((p) =>
       setQueue((current) => [...current, { type: 'hostkey', ...p }])
     )
-    const offStats = window.api.stats.onUpdate(setStats)
+    // Metrics land in their own store rather than in App state: at two ticks a
+    // second, a setState here re-rendered the whole window to move six meters.
+    const offStats = window.api.stats.onUpdate(statsActions.setLocal)
     const offRemote = window.api.stats.onRemote(({ tabId, stats: remote }) =>
-      setRemoteStats((current) => ({ ...current, [tabId]: remote }))
+      statsActions.setRemote(tabId, remote)
     )
     const offTunnels = window.api.tunnels.onStatus((state) =>
       setActiveTunnels(state.filter((s) => s.state === 'running').length)
@@ -245,11 +243,7 @@ export function App() {
 
   const closeTab = useCallback((tabId: string) => {
     connects.current.delete(tabId)
-    setRemoteStats((current) => {
-      const next = { ...current }
-      delete next[tabId]
-      return next
-    })
+    statsActions.dropTab(tabId)
     setTabs((current) => {
       const next = current.filter((tab) => tab.tabId !== tabId)
       setActiveId((active) => (active === tabId ? (next[next.length - 1]?.tabId ?? null) : active))
@@ -717,8 +711,7 @@ export function App() {
 
       {view.showStats && (
         <StatsBar
-          local={stats}
-          remote={activeTab ? (remoteStats[activeTab.tabId] ?? null) : null}
+          activeTabId={activeTab?.tabId ?? null}
           showLocal={showLocalStats}
           onToggleScope={() => setShowLocalStats((v) => !v)}
         />

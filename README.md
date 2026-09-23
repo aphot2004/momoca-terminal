@@ -151,13 +151,20 @@ simply unsigned, and users need the right-click-Open dance above.
   file, new folder, delete), an editable path bar, and a right-click menu with
   open-in-editor, download, rename, delete, copy name/path, upload, new
   file/folder, and permissions.
+- **Multiple selection** — Finder's rules, because this is a file list: click
+  selects, ⌘-click toggles one, Shift-click takes the range, ⌘A takes the
+  listing. Download and delete then act on the whole selection — files and
+  folders mixed — as one operation with one progress bar and one confirmation,
+  not one prompt per item. Right-clicking inside a selection acts on all of it;
+  right-clicking outside one selects what you landed on.
 - **Embedded editor** — open a remote file straight from the browser, edit, and
   `⌘S` writes it back over the same SFTP channel.
 - **Permissions** — a chmod grid on the properties dialog, showing the octal and
   `rwx` forms as you toggle bits.
 - **Recursive delete** — SFTP's `rmdir` only removes empty directories, so a
-  folder is emptied depth-first. The confirmation names the item count first,
-  and symlinks are unlinked rather than descended into.
+  folder is emptied depth-first. The confirmation names the item count first —
+  for a selection, the total across everything inside every folder in it — and
+  symlinks are unlinked rather than descended into.
 - **Auto-refresh** — the file pane follows changes you make in the terminal
   beside it. Re-listing every tick would re-transfer the directory for nothing,
   so each 1.5s tick `stat`s the open folder — one small round trip — and only
@@ -167,9 +174,42 @@ simply unsigned, and users need the right-click-Open dance above.
   before re-rendering so your selection and scroll position survive, and a
   footer toggle turns it off for slow links.
 - **Transfer progress** — downloads, uploads and deletes report the file in
-  flight, bytes moved against the total, throughput and an ETA. Byte counts come
-  from `fastGet`/`fastPut`'s step callback, and the rate is averaged over a
-  sliding 3s window so it doesn't jitter per chunk.
+  flight, bytes moved against the total, throughput and an ETA. Byte counts are
+  the app's own — a manual pipe with per-chunk accounting, not `fastGet`/
+  `fastPut`'s step callback, which could report a chunk larger than a small
+  file's own size on its last step and make the counter jump backwards on the
+  next file. The rate is averaged over a sliding 3s window so it doesn't jitter
+  per chunk.
+- **Scanning feedback** — the pre-walk that gives a bulk download or delete its
+  totals is real round trips over the connection, and used to be invisible: a
+  big tree looked exactly like a stuck button for however long it took. The
+  transfer bar now shows "Preparing…" with a running count while that happens.
+- **Concurrent transfers** — up to 4 files move at once per operation instead of
+  one at a time. SFTP is one request/response round trip per file, so a folder
+  of small files (photos, icons) pays that latency far less when several are in
+  flight together; the limit stays modest on purpose; this app talks to small
+  home servers as often as fast ones, and flooding a modest SFTP subsystem
+  would waste the connection rather than use it well.
+- **Stop** — every download, upload and delete can be cancelled mid-flight from
+  a button on its own progress bar. Cancellation is checked between chunks, not
+  just between files, so it takes effect within about one chunk even on a
+  single large file already in progress — not "after this file finishes."
+- **Per-file sub-bar** — a second, smaller bar under the batch total follows
+  whichever file most recently sent a chunk, showing that one file's own
+  percentage. The batch bar alone can't show this: several files move at once,
+  so it's an aggregate by construction.
+- **One bad file doesn't cost the rest of the batch** — a file that fails is
+  retried a couple of times, then given up on and named in the finish summary;
+  the other files in the same batch keep going regardless. An earlier version
+  let a single failure quietly stop an entire concurrent lane, which could
+  leave files never even attempted with nothing on screen to say so.
+- **Case-insensitive destinations don't lose files** — two remote files that
+  differ only by case (`index.html` / `Index.html`, which real exports and
+  case-migrated sites do have) used to collide into one file on a
+  case-insensitive destination like macOS's default APFS: the second write
+  silently overwrote the first, and the on-screen count still said both
+  downloaded. Both now land, the second under a disambiguated name, and the
+  finish summary says so.
 - **No dialog pile-ups** — every destructive or dialog-opening action runs
   through `useExclusive`, which drops re-entrant clicks using a *ref* (state is
   batched, so a double-click would otherwise slip through) and stays locked for
@@ -189,10 +229,21 @@ simply unsigned, and users need the right-click-Open dance above.
   counts toward one 50,000-entry ceiling, and depth caps at 32. Parent
   directories are created before their children, so an interrupted upload
   leaves a partial tree rather than orphaned files.
-- **Folder download** — recursive, with live progress. Symlinks are skipped
+- **Folder download** — recursive, with live progress. The whole selection is
+  walked before anything transfers, so the progress bar has a real denominator
+  across the batch instead of resetting at each item. Symlinks are skipped
   rather than followed, cycles are caught by resolving each directory, and a
   50,000-entry ceiling bounds the walk even if a server misdescribes its own
   tree. A link to `/` cannot turn a folder download into a filesystem copy.
+- **Exclusions** — anything that walks a tree asks first, and that dialog is
+  where you say what to leave out. Patterns are the ones you already know from
+  `.gitignore` and `rsync --exclude`: a bare name (`node_modules`, `*.log`)
+  matches at any depth, a trailing `/` matches folders only, and a pattern
+  containing `/` is anchored to the path the item will take on disk — what you
+  type mirrors what lands there. `*` stops at a slash, `**` crosses one. An
+  excluded folder is *pruned*, never listed, so skipping `node_modules` costs
+  nothing rather than costing a walk you throw away. The last set you used is
+  offered again, and the common ones are one click.
 - **Network tools** — ping (streams replies live, with min/avg/max and loss), a
   concurrent TCP port scanner with service names and presets, and subnet
   discovery that ping-sweeps a CIDR then retries quiet hosts on common TCP

@@ -1,5 +1,6 @@
-import { useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { RemoteStats, SystemStats } from '@shared/types'
+import { statsActions, useStats } from '../stats-store'
 import { StatsDetailPopover, type MetricId } from './StatsDetailPopover'
 
 function bytes(value: number, digits = 1): string {
@@ -53,7 +54,16 @@ function Meter({
     >
       <span className="metric-label">{label}</span>
       <span className="meter">
-        <span className={`meter-fill ${severity(clamped)}`} style={{ width: `${clamped * 100}%` }} />
+        {/*
+          Scaled, not resized. A `width` transition on six meters relayouts and
+          repaints the document for 400ms out of every 2000ms; a transform is
+          handed to the compositor and costs the main thread nothing. The track
+          clips the corners, so the fill needs no radius of its own.
+        */}
+        <span
+          className={`meter-fill ${severity(clamped)}`}
+          style={{ transform: `scaleX(${clamped})` }}
+        />
       </span>
       <span className="metric-value">{value}</span>
     </div>
@@ -61,9 +71,8 @@ function Meter({
 }
 
 interface Props {
-  local: SystemStats | null
-  /** Metrics for the active SSH tab's server, when there is one. */
-  remote: RemoteStats | null
+  /** Whose server metrics to show; null when no tab is focused. */
+  activeTabId: string | null
   /** Show the local machine even while a remote session is open. */
   showLocal: boolean
   onToggleScope: () => void
@@ -73,8 +82,20 @@ interface Props {
  * Reports the machine you're working on: the connected server whenever an SSH
  * tab is focused, this Mac otherwise. The scope chip flips between the two.
  */
-export function StatsBar({ local, remote, showLocal, onToggleScope }: Props) {
+export function StatsBar({ activeTabId, showLocal, onToggleScope }: Props) {
   const [hover, setHover] = useState<{ metric: MetricId; rect: DOMRect } | null>(null)
+  const { local, remote: byTab } = useStats()
+  const remote = activeTabId ? (byTab[activeTabId] ?? null) : null
+
+  // Nothing is sampled unless this bar is on screen asking for it, and the
+  // expensive per-meter detail is gathered only while a popover is open.
+  useEffect(() => {
+    statsActions.setSummaryWanted(true)
+    return () => statsActions.setSummaryWanted(false)
+  }, [])
+  useEffect(() => {
+    statsActions.setDetailWanted(hover !== null)
+  }, [hover !== null])
   // A metric's own rectangle, captured on enter; null on leave.
   const show = (metric: MetricId) => (rect: DOMRect | null) =>
     setHover(rect ? { metric, rect } : (current) => (current?.metric === metric ? null : current))

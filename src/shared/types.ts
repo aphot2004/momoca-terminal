@@ -131,9 +131,29 @@ export type TransferKind = 'download' | 'upload' | 'delete'
 export interface TransferProgress {
   tabId: string
   kind: TransferKind
+  /**
+   * The pre-walk itself: real round trips over the connection, with nothing
+   * to show yet because the total isn't known. Absent (or 'transferring')
+   * once `total` is meaningful. Without this, a big selection looked exactly
+   * like a broken button — disabled controls and nothing else for however
+   * long the walk took.
+   */
+  phase?: 'scanning' | 'transferring'
+  /** Items found so far, while `phase` is 'scanning'. */
+  found?: number
   /** Items finished, and how many the pre-walk found. */
   done: number
   total: number
+  /**
+   * One real file's own progress, for a second, smaller bar under the main
+   * one. Follows whichever file most recently reported a chunk, so the name
+   * and the percentage next to it are always a pair that belongs together —
+   * useful under concurrency, where more than one file moves at once and the
+   * aggregate total alone can't show any single file's own progress.
+   */
+  currentFile?: string
+  currentFileBytes?: number
+  currentFileTotalBytes?: number
   /** Name of the file currently being worked on. */
   current: string
   /** Byte counters; zero for deletes, which move no data. */
@@ -144,6 +164,8 @@ export interface TransferProgress {
   finished?: boolean
   /** Human-readable outcome, present with `finished`. */
   summary?: string
+  /** Stopped from the UI rather than finished or failed. */
+  cancelled?: boolean
   error?: string
 }
 
@@ -318,12 +340,15 @@ export interface RemoteStats {
 /**
  * The detail behind each meter, shown on hover.
  *
- * Gathered on the same poll as the summary, because a probe fired on mouse-over
- * would arrive after the pointer had moved on. Every field is optional: a host
- * that cannot answer one question still answers the others, and the popover
- * shows what it has rather than failing whole.
+ * Every field is optional: a host that cannot answer one question still answers
+ * the others, and the popover shows what it has rather than failing whole. A
+ * field that is missing because the probes have not run yet is a different
+ * thing from one the host could not answer, hence `sampled` — without it the
+ * popover would announce a failure that has not happened.
  */
 export interface StatsDetail {
+  /** The probes behind the fields below have run at least once. */
+  sampled?: boolean
   /** Per-core busy percentage, in core order. */
   cores?: number[]
   /** Top processes by resident memory, largest first. */

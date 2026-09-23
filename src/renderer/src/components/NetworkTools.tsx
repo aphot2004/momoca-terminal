@@ -304,8 +304,8 @@ export function NetworkTools({ onClose, onConnect, initialTab = 'ping' }: Props)
             </div>
             <span className="meter">
               <span
-                className="meter-fill ok"
-                style={{ width: `${(progress.done / progress.total) * 100}%` }}
+                className="meter-fill ok smooth"
+                style={{ transform: `scaleX(${progress.done / progress.total})` }}
               />
             </span>
           </div>

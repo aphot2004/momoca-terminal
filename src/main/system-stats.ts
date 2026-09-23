@@ -1,9 +1,16 @@
-import { exec } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { cpus, loadavg, totalmem, uptime } from 'node:os'
 import { promisify } from 'node:util'
 import type { StatsDetail, SystemStats } from '@shared/types'
 
-const run = promisify(exec)
+/**
+ * `execFile`, not `exec`: `exec` runs everything through `/bin/sh`, so a probe
+ * that also pipes through `sort` and `head` costs four processes rather than
+ * one. This loop runs every couple of seconds for the life of the app, so the
+ * shell and the pipeline are paid for over and over — the sorting and trimming
+ * are done in JS below instead.
+ */
+const run = promisify(execFile)
 
 interface CpuSample {
   idle: number
@@ -41,7 +48,7 @@ let lastNet: { rx: number; tx: number; at: number } | null = null
 async function readMemory(): Promise<{ used: number; total: number }> {
   const total = totalmem()
   try {
-    const { stdout } = await run('vm_stat')
+    const { stdout } = await run('/usr/bin/vm_stat', [])
     const pageSize = Number(/page size of (\d+) bytes/.exec(stdout)?.[1] ?? 4096)
     const pages = (label: string) =>
       Number(new RegExp(`${label}:\\s+(\\d+)`).exec(stdout)?.[1] ?? 0)
@@ -64,7 +71,9 @@ async function readMemory(): Promise<{ used: number; total: number }> {
  */
 async function readDisk(): Promise<{ used: number; total: number; mount: string }> {
   try {
-    const { stdout } = await run('df -k /System/Volumes/Data 2>/dev/null || df -k /')
+    const { stdout } = await run('/bin/df', ['-k', '/System/Volumes/Data']).catch(() =>
+      run('/bin/df', ['-k', '/'])
+    )
     const line = stdout.trim().split('\n').pop() ?? ''
     const parts = line.split(/\s+/)
     const usedKb = Number(parts[2] ?? 0)
@@ -82,7 +91,7 @@ async function readDisk(): Promise<{ used: number; total: number; mount: string 
 /** Bytes/sec, derived by diffing cumulative interface counters between polls. */
 async function readNetwork(): Promise<{ rx: number; tx: number }> {
   try {
-    const { stdout } = await run('netstat -ibn')
+    const { stdout } = await run('/usr/sbin/netstat', ['-ibn'])
     let rx = 0
     let tx = 0
     const seen = new Set<string>()
@@ -117,18 +126,13 @@ async function readNetwork(): Promise<{ rx: number; tx: number }> {
 }
 
 /**
- * The per-meter detail, gathered on the same tick as the summary.
- *
- * Every probe is allowed to fail on its own: a machine without `iostat`, or a
- * `ps` that returns something unexpected, must not cost the whole bar. Each
- * returns undefined and the popover simply shows less.
+ * Busy per core, diffed against the previous tick. Free — the counters come
+ * from `os.cpus()` — so it is sampled every tick even when the popover that
+ * shows it is closed, which keeps the window it averages over honest.
  */
-async function collectDetail(): Promise<StatsDetail> {
-  const detail: StatsDetail = {}
-
-  // Per-core, from the same counters Node already exposes.
+function readCores(): number[] {
   const cores = perCoreSample()
-  detail.cores = cores.map((core, i) => {
+  const busy = cores.map((core, i) => {
     const previous = lastCores[i]
     if (!previous) return 0
     const idleDelta = core.idle - previous.idle
@@ -136,39 +140,56 @@ async function collectDetail(): Promise<StatsDetail> {
     return totalDelta > 0 ? Math.min(1, Math.max(0, 1 - idleDelta / totalDelta)) : 0
   })
   lastCores = cores
+  return busy
+}
 
-  // Top processes, one ps for each ordering. rss is in kilobytes.
+/**
+ * The per-meter detail behind the hover popover.
+ *
+ * This is the expensive half of a tick by a wide margin — two full process
+ * table walks, a `df` of every mount and an `ioreg` sweep — so it is gathered
+ * only while the popover is actually open. The summary above costs about 7ms;
+ * this costs about 60ms, and used to be paid every two seconds whether anyone
+ * was looking or not.
+ *
+ * Every probe is allowed to fail on its own: a machine without `iostat`, or a
+ * `ps` that returns something unexpected, must not cost the whole bar. Each
+ * returns undefined and the popover simply shows less.
+ */
+async function collectDetail(): Promise<StatsDetail> {
+  const detail: StatsDetail = { sampled: true }
+
   await Promise.all([
-    run('/bin/ps -axo rss=,pid=,comm= -r | sort -rn -k1 | head -8')
+    // One walk of the process table, ordered twice in JS. Asking `ps` for both
+    // orderings meant scanning every process on the machine twice, which was
+    // the single most expensive thing this app did while idle.
+    run('/bin/ps', ['-axo', 'rss=,pcpu=,pid=,comm='])
       .then(({ stdout }) => {
-        detail.topMemory = stdout
-          .trim()
+        const rows = stdout
           .split('\n')
-          .filter(Boolean)
-          .map((line) => {
-            const [, rss, pid, name] = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line) ?? []
-            return { name: shortName(name ?? ''), pid: Number(pid), bytes: Number(rss) * 1024 }
-          })
-          .filter((x) => x.pid)
-      })
-      .catch(() => undefined),
+          .map((line) => /^\s*(\d+)\s+([\d.]+)\s+(\d+)\s+(.*)$/.exec(line))
+          .filter((m): m is RegExpExecArray => m !== null)
+          .map((m) => ({
+            name: shortName(m[4]),
+            pid: Number(m[3]),
+            bytes: Number(m[1]) * 1024,
+            percent: Number(m[2])
+          }))
+          .filter((row) => row.pid)
 
-    run('/bin/ps -axo pcpu=,pid=,comm= -r | head -8')
-      .then(({ stdout }) => {
-        detail.topCpu = stdout
-          .trim()
-          .split('\n')
-          .filter(Boolean)
-          .map((line) => {
-            const [, pcpu, pid, name] = /^\s*([\d.]+)\s+(\d+)\s+(.*)$/.exec(line) ?? []
-            return { name: shortName(name ?? ''), pid: Number(pid), percent: Number(pcpu) }
-          })
-          .filter((x) => x.pid)
+        detail.topMemory = [...rows]
+          .sort((a, b) => b.bytes - a.bytes)
+          .slice(0, 8)
+          .map(({ name, pid, bytes }) => ({ name, pid, bytes }))
+        detail.topCpu = [...rows]
+          .sort((a, b) => b.percent - a.percent)
+          .slice(0, 8)
+          .map(({ name, pid, percent }) => ({ name, pid, percent }))
       })
       .catch(() => undefined),
 
     // Real filesystems only: df lists a long tail of synthetic mounts.
-    run('/bin/df -k')
+    run('/bin/df', ['-k'])
       .then(({ stdout }) => {
         detail.volumes = stdout
           .trim()
@@ -189,7 +210,7 @@ async function collectDetail(): Promise<StatsDetail> {
     // iostat reports throughput but never splits read from write; the IO
     // registry's per-driver Statistics block does, and is what Activity
     // Monitor reads. Summed across every block device.
-    run('/usr/sbin/ioreg -c IOBlockStorageDriver -r -d 1 -w0')
+    run('/usr/sbin/ioreg', ['-c', 'IOBlockStorageDriver', '-r', '-d', '1', '-w0'])
       .then(({ stdout }) => {
         let read = 0
         let written = 0
@@ -199,7 +220,7 @@ async function collectDetail(): Promise<StatsDetail> {
       })
       .catch(() => undefined),
 
-    run('/usr/sbin/netstat -ibn')
+    run('/usr/sbin/netstat', ['-ibn'])
       .then(({ stdout }) => {
         const seen = new Map<string, { name: string; rx: number; tx: number; address?: string }>()
         for (const line of stdout.trim().split('\n').slice(1)) {
@@ -236,7 +257,12 @@ function shortName(command: string): string {
   return command.split('/').pop() || command
 }
 
-export async function collectStats(): Promise<SystemStats> {
+/**
+ * One sample of this Mac. `withDetail` is what the hover popover needs; it is
+ * an order of magnitude more expensive than the summary, so the caller asks
+ * for it only while the popover is open.
+ */
+export async function collectStats(withDetail = false): Promise<SystemStats> {
   const current = sampleCpu()
   const idleDelta = current.idle - lastCpu.idle
   const totalDelta = current.total - lastCpu.total
@@ -246,8 +272,9 @@ export async function collectStats(): Promise<SystemStats> {
     readMemory(),
     readDisk(),
     readNetwork(),
-    collectDetail()
+    withDetail ? collectDetail() : Promise.resolve<StatsDetail>({})
   ])
+  detail.cores = readCores()
   const cores = cpus()
 
   return {

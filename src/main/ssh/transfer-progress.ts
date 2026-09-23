@@ -25,6 +25,10 @@ export class TransferReporter {
   private done = 0
   private bytes = 0
   private current = ''
+  /** The one file the sub-bar tracks — whichever last reported a chunk. */
+  private currentFile = ''
+  private currentFileBytes = 0
+  private currentFileTotalBytes = 0
 
   constructor(
     private readonly sender: WebContents,
@@ -48,6 +52,20 @@ export class TransferReporter {
   /** Absolute byte count for the whole operation so far. */
   setBytes(bytes: number): void {
     this.bytes = bytes
+    this.emit()
+  }
+
+  /**
+   * One real file's own progress, for the sub-bar. Under concurrency several
+   * files are "current" at once; this simply follows whichever one just sent
+   * a chunk, so the name and the percentage next to it are always a pair that
+   * actually belongs together — never a name from one file next to a number
+   * from another.
+   */
+  setCurrentFileProgress(name: string, bytes: number, total: number): void {
+    this.currentFile = name
+    this.currentFileBytes = bytes
+    this.currentFileTotalBytes = total
     this.emit()
   }
 
@@ -79,7 +97,10 @@ export class TransferReporter {
       current: this.current,
       bytes: this.bytes,
       totalBytes: this.totalBytes,
-      bytesPerSecond: this.speed()
+      bytesPerSecond: this.speed(),
+      currentFile: this.currentFile,
+      currentFileBytes: this.currentFileBytes,
+      currentFileTotalBytes: this.currentFileTotalBytes
     })
   }
 
@@ -91,8 +112,53 @@ export class TransferReporter {
       bytes: this.bytes,
       totalBytes: this.totalBytes,
       bytesPerSecond: 0,
+      currentFile: '',
+      currentFileBytes: 0,
+      currentFileTotalBytes: 0,
       finished: true,
       summary
+    })
+  }
+
+  /** Stopped from the UI rather than finished or failed — a distinct, calmer outcome. */
+  cancel(summary: string): void {
+    this.send({
+      done: this.done,
+      total: this.total,
+      current: '',
+      bytes: this.bytes,
+      totalBytes: this.totalBytes,
+      bytesPerSecond: 0,
+      currentFile: '',
+      currentFileBytes: 0,
+      currentFileTotalBytes: 0,
+      finished: true,
+      cancelled: true,
+      summary
+    })
+  }
+
+  /**
+   * The pre-walk is still discovering items; `total` isn't known yet. Shares
+   * the same throttle as `emit()` so a fast local disk or a shallow tree
+   * doesn't flood the renderer with one message per entry.
+   */
+  scanning(found: number): void {
+    const now = Date.now()
+    if (now - this.lastEmit < EMIT_INTERVAL_MS) return
+    this.lastEmit = now
+    this.send({
+      done: 0,
+      total: 0,
+      current: '',
+      bytes: 0,
+      totalBytes: 0,
+      bytesPerSecond: 0,
+      currentFile: '',
+      currentFileBytes: 0,
+      currentFileTotalBytes: 0,
+      phase: 'scanning',
+      found
     })
   }
 
@@ -104,6 +170,9 @@ export class TransferReporter {
       bytes: this.bytes,
       totalBytes: this.totalBytes,
       bytesPerSecond: 0,
+      currentFile: '',
+      currentFileBytes: 0,
+      currentFileTotalBytes: 0,
       finished: true,
       error
     })

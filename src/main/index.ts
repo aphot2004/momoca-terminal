@@ -3,10 +3,8 @@ import { dirname, join } from 'node:path'
 import { app, BrowserWindow, shell } from 'electron'
 import { registerIpc } from './ipc'
 import { stopAllTunnels } from './ssh/tunnels'
-import { collectStats } from './system-stats'
+import { startStatsPoll } from './stats-poll'
 import { disposeAll } from './terminals/registry'
-
-const STATS_INTERVAL_MS = 2000
 
 /** Store files this app owns. Chromium's own caches are not ours to move. */
 const STORE_FILES = ['sessions.json', 'keys.json', 'macros.json', 'tunnels.json', 'vault.json']
@@ -78,24 +76,9 @@ function createWindow(): BrowserWindow {
 
   window.once('ready-to-show', () => window.show())
 
-  // Poll host metrics for the diagnostics bar. Overlapping samples would skew
-  // the CPU and network deltas, so each tick waits for the previous one.
-  let statsTimer: NodeJS.Timeout | null = null
-  const tick = async () => {
-    if (window.isDestroyed()) return
-    try {
-      window.webContents.send('stats:update', await collectStats())
-    } catch {
-      /* a failed sample is not worth surfacing */
-    }
-    if (!window.isDestroyed()) statsTimer = setTimeout(tick, STATS_INTERVAL_MS)
-  }
-  statsTimer = setTimeout(tick, 400)
-
-  window.on('closed', () => {
-    if (statsTimer) clearTimeout(statsTimer)
-    statsTimer = null
-  })
+  // Poll host metrics for the diagnostics bar — but only while the bar is on
+  // screen and asking. See stats-poll.ts.
+  startStatsPoll(window)
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url)
